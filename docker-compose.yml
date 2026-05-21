@@ -1,0 +1,9 @@
+services:
+  hellomate:
+    container_name: hellomate-bot
+    build: .
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+

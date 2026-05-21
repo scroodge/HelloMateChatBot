@@ -1,0 +1,2 @@
+"""HelloMate Telegram bot package."""
+
