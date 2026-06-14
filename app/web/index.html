@@ -266,7 +266,7 @@
 </head>
 <body>
 
-<div id="lock-screen" hidden style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:80vh;text-align:center;padding:24px;gap:12px">
+<div id="lock-screen" style="display:none;flex-direction:column;align-items:center;justify-content:center;min-height:80vh;text-align:center;padding:24px;gap:12px">
   <div style="font-size:48px">🔒</div>
   <div style="font-weight:600;font-size:18px">Доступ только из Telegram</div>
   <div style="color:var(--hint);max-width:280px">Эта консоль открывается кнопкой меню в чате с ботом и доступна только администратору.</div>
@@ -469,7 +469,7 @@ const isLocalDev = ['127.0.0.1', 'localhost'].includes(location.hostname);
 // The API is already initData+admin gated; this just hides the console UI from
 // anyone who loads the public URL in a plain browser.
 if (!initData && !isLocalDev) {
-  document.getElementById('lock-screen').hidden = false;
+  document.getElementById('lock-screen').style.display = 'flex';
   document.getElementById('nav').style.display = 'none';
   document.querySelector('main').style.display = 'none';
 } else {
