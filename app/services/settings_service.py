@@ -20,6 +20,10 @@ BUSINESS_REPLY_MODE_SETTING = "business_reply_mode"
 VALID_BUSINESS_REPLY_MODES = {"auto", "suggest", "off"}
 DEFAULT_BUSINESS_REPLY_MODE = "suggest"
 
+OPENNESS_SETTING = "openness"
+VALID_OPENNESS = {"open", "neutral", "reserved"}
+DEFAULT_OPENNESS = "neutral"
+
 
 class SettingsService:
     """Manage per-user and global bot settings."""
@@ -230,4 +234,31 @@ class SettingsService:
             raise ValueError(f"business_reply_mode must be one of {VALID_BUSINESS_REPLY_MODES}")
         return self.save_user_settings(
             replace(self._with_current(user_id), business_reply_mode=mode)
+        )
+
+    def get_openness(self, user_id: int) -> str:
+        """Return effective openness: per-contact → global → default."""
+
+        per_contact = self.get_user_settings(user_id).openness
+        if per_contact and per_contact in VALID_OPENNESS:
+            return per_contact
+        global_value = self.get_bot_setting(OPENNESS_SETTING, "").strip()
+        if global_value in VALID_OPENNESS:
+            return global_value
+        return DEFAULT_OPENNESS
+
+    def set_openness(self, user_id: int, openness: str | None) -> UserSettings:
+        """Set or clear per-contact openness level."""
+
+        if openness is not None and openness not in VALID_OPENNESS:
+            raise ValueError(f"openness must be one of {VALID_OPENNESS}")
+        return self.save_user_settings(
+            replace(self._with_current(user_id), openness=openness)
+        )
+
+    def set_style_learning(self, user_id: int, enabled: bool) -> UserSettings:
+        """Enable or disable owner-style learning for a contact."""
+
+        return self.save_user_settings(
+            replace(self._with_current(user_id), style_learning_enabled=enabled)
         )

@@ -26,6 +26,8 @@ class UserSettings:
     persona_topics: str | None = None  # JSON list of allowed topics
     persona_boundaries: str | None = None  # JSON list of forbidden topics
     business_reply_mode: str | None = None  # "auto" | "suggest" | "off" | None=inherit global
+    openness: str | None = None  # "open" | "neutral" | "reserved" | None=inherit global
+    style_learning_enabled: bool = False  # learn the owner's writing style for this contact
 
 
 @dataclass(frozen=True, slots=True)

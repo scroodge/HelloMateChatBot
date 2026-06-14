@@ -27,6 +27,9 @@ def test_schema_created_on_open(tmp_path: Path) -> None:
         "user_greeting_rules",
         "business_connections",
         "business_chats",
+        "contact_facts",
+        "contact_facts_meta",
+        "contact_style_profiles",
     }
     assert expected <= tables
 

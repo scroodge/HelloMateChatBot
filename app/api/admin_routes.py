@@ -53,6 +53,8 @@ class UserSettingsWriteRequest(BaseModel):
     use_starters: bool | None = None
     greeting_text: str | None = None
     business_reply_mode: str | None = None  # "auto" | "suggest" | "off" | null=inherit global
+    openness: str | None = None  # "open" | "neutral" | "reserved" | null=inherit global
+    style_learning_enabled: bool | None = None
 
 
 class ContactFactWriteRequest(BaseModel):
@@ -171,6 +173,8 @@ def create_admin_router(
             else {}
         )
 
+        style = memory_service.get_style_profile(user_id)
+
         return {
             "user_id": user_id,
             "display_name": profile.display_name if profile else None,
@@ -182,6 +186,10 @@ def create_admin_router(
             "greeting_text": settings.greeting_text,
             "business_reply_mode": settings.business_reply_mode,
             "effective_business_reply_mode": settings_service.get_business_reply_mode(user_id),
+            "openness": settings.openness,
+            "effective_openness": settings_service.get_openness(user_id),
+            "style_learning_enabled": settings.style_learning_enabled,
+            "style_profile": style.profile if style else None,
             "persona": {
                 "source": persona_source,
                 "resolved_prompt": prompt,
@@ -289,14 +297,16 @@ def create_admin_router(
         from dataclasses import replace
 
         current = settings_service.get_user_settings(user_id)
-        # All fields except business_reply_mode use the simple replace path
+        # business_reply_mode and openness can be explicitly cleared to null
+        # (inherit global), so they are handled separately from the simple path.
+        nullable_keys = {"business_reply_mode", "openness"}
         simple_fields = {
             k: v
             for k, v in request.model_dump().items()
-            if v is not None and k != "business_reply_mode"
+            if v is not None and k not in nullable_keys
         }
         updated = replace(current, **simple_fields)
-        # business_reply_mode can be explicitly cleared (set to None/null) so handle separately
+
         if "business_reply_mode" in request.model_fields_set:
             mode = request.business_reply_mode
             if mode is not None and mode not in {"auto", "suggest", "off"}:
@@ -305,6 +315,16 @@ def create_admin_router(
                     detail="business_reply_mode must be 'auto', 'suggest', 'off', or null",
                 )
             updated = replace(updated, business_reply_mode=mode)
+
+        if "openness" in request.model_fields_set:
+            openness = request.openness
+            if openness is not None and openness not in {"open", "neutral", "reserved"}:
+                raise HTTPException(
+                    status_code=422,
+                    detail="openness must be 'open', 'neutral', 'reserved', or null",
+                )
+            updated = replace(updated, openness=openness)
+
         try:
             saved = settings_service.save_user_settings(updated)
         except ValueError as exc:
@@ -318,6 +338,9 @@ def create_admin_router(
             "greeting_text": saved.greeting_text,
             "business_reply_mode": saved.business_reply_mode,
             "effective_business_reply_mode": settings_service.get_business_reply_mode(user_id),
+            "openness": saved.openness,
+            "effective_openness": settings_service.get_openness(user_id),
+            "style_learning_enabled": saved.style_learning_enabled,
         }
 
     # -----------------------------------------------------------------------
@@ -361,6 +384,16 @@ def create_admin_router(
             raise HTTPException(status_code=503, detail="Facts service not enabled")
         facts_service.clear_facts(user_id)
         return {}
+
+    # -----------------------------------------------------------------------
+    # 12: Learned owner style
+    # -----------------------------------------------------------------------
+
+    @router.delete("/users/{user_id}/style")
+    async def clear_style(user_id: int, caller_id: int = AdminUser) -> dict[str, Any]:
+        """Clear the learned owner-style profile for a contact (it will re-learn)."""
+        memory_service.delete_style_profile(user_id)
+        return {"user_id": user_id, "style_profile": None}
 
     @router.get("/settings")
     async def get_global_settings(caller_id: int = AdminUser) -> dict[str, Any]:

@@ -23,6 +23,7 @@ from app.services.profile_service import ProfileService
 from app.services.reply_debounce_service import ReplyDebounceService
 from app.services.reply_service import ReplyService
 from app.services.settings_service import SettingsService
+from app.services.style_service import StyleService
 from app.services.summary_service import SummaryService
 
 logger = logging.getLogger(__name__)
@@ -135,7 +136,10 @@ async def _process_incoming_text(
 
     if isinstance(memory_service, MemoryService) and message_text:
         if sender_is_owner:
-            memory_service.record_assistant_message(contact_user_id, message_text)
+            # Real human reply typed by the owner — feeds style learning.
+            memory_service.record_assistant_message(
+                contact_user_id, message_text, authored_by="owner"
+            )
         else:
             memory_service.record_user_message(contact_user_id, message_text)
 
@@ -149,6 +153,11 @@ async def _process_incoming_text(
     facts_service = context.bot_data.get("facts_service")
     if isinstance(facts_service, ContactFactsService) and message_text and not sender_is_owner:
         facts_service.schedule_extraction(contact_user_id)
+
+    # Owner replies feed style learning; refresh the profile after an owner message.
+    style_service = context.bot_data.get("style_service")
+    if isinstance(style_service, StyleService) and message_text and sender_is_owner:
+        style_service.schedule_refresh(contact_user_id)
 
     if sender_is_owner:
         return

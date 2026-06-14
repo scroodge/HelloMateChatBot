@@ -44,6 +44,8 @@ async def test_build_messages_uses_resolved_persona_prompt() -> None:
     settings_service = MagicMock()
     settings_service.resolve_persona_prompt.return_value = "Custom admin persona"
     settings_service.get_language.return_value = "ru"
+    settings_service.get_openness.return_value = "neutral"
+    settings_service.get_user_settings.return_value = MagicMock(style_learning_enabled=False)
 
     profile = MagicMock(display_name="Way")
     profile_service = MagicMock()
@@ -51,6 +53,7 @@ async def test_build_messages_uses_resolved_persona_prompt() -> None:
 
     memory_service = MagicMock()
     memory_service.get_summary.return_value = None
+    memory_service.get_style_profile.return_value = None
     memory_service.as_chat_messages.return_value = []
 
     mood_service = MagicMock()
@@ -70,4 +73,5 @@ async def test_build_messages_uses_resolved_persona_prompt() -> None:
 
     settings_service.resolve_persona_prompt.assert_called_once_with(42, "ru", "Way")
     assert messages[0]["role"] == "system"
-    assert messages[0]["content"] == "Custom admin persona"
+    # Persona is the base of the system prompt; an openness directive is appended last.
+    assert messages[0]["content"].startswith("Custom admin persona")

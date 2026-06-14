@@ -5,11 +5,19 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING, Protocol
 
-from sqlalchemy import func, insert, select
+from sqlalchemy import delete, func, insert, select
 
-from app.database.schema import conversation_messages, conversation_summaries
+from app.database.schema import (
+    contact_style_profiles,
+    conversation_messages,
+    conversation_summaries,
+)
 from app.database.util import upsert
-from app.models.memory import ConversationMessage, ConversationSummary
+from app.models.memory import (
+    ContactStyleProfile,
+    ConversationMessage,
+    ConversationSummary,
+)
 
 if TYPE_CHECKING:
     from app.database.db import Database
@@ -28,9 +36,21 @@ class MemoryRepository(Protocol):
         self, user_id: int, *, offset: int, limit: int
     ) -> list[ConversationMessage]: ...
 
+    def count_owner_messages(self, user_id: int) -> int: ...
+
+    def list_owner_messages_asc(
+        self, user_id: int, *, offset: int, limit: int
+    ) -> list[ConversationMessage]: ...
+
     def get_summary(self, user_id: int) -> ConversationSummary | None: ...
 
     def set_summary(self, summary: ConversationSummary) -> ConversationSummary: ...
+
+    def get_style_profile(self, user_id: int) -> ContactStyleProfile | None: ...
+
+    def set_style_profile(self, profile: ContactStyleProfile) -> ContactStyleProfile: ...
+
+    def delete_style_profile(self, user_id: int) -> None: ...
 
 
 class MemoryRepositoryImpl:
@@ -47,6 +67,7 @@ class MemoryRepositoryImpl:
                     role=message.role,
                     content=message.content,
                     created_at=message.created_at.isoformat(),
+                    authored_by=message.authored_by,
                 )
             )
             message_id = int(result.inserted_primary_key[0])
@@ -56,6 +77,7 @@ class MemoryRepositoryImpl:
             role=message.role,
             content=message.content,
             created_at=message.created_at,
+            authored_by=message.authored_by,
         )
 
     def list_messages(self, user_id: int, limit: int = 20) -> list[ConversationMessage]:
@@ -73,11 +95,51 @@ class MemoryRepositoryImpl:
                 role=row.role,
                 content=row.content,
                 created_at=datetime.fromisoformat(row.created_at),
+                authored_by=getattr(row, "authored_by", None),
             )
             for row in rows
         ]
         messages.reverse()
         return messages
+
+    def count_owner_messages(self, user_id: int) -> int:
+        with self._db.engine.connect() as connection:
+            return int(
+                connection.execute(
+                    select(func.count())
+                    .select_from(conversation_messages)
+                    .where(
+                        conversation_messages.c.user_id == user_id,
+                        conversation_messages.c.authored_by == "owner",
+                    )
+                ).scalar_one()
+            )
+
+    def list_owner_messages_asc(
+        self, user_id: int, *, offset: int, limit: int
+    ) -> list[ConversationMessage]:
+        with self._db.engine.connect() as connection:
+            rows = connection.execute(
+                select(conversation_messages)
+                .where(
+                    conversation_messages.c.user_id == user_id,
+                    conversation_messages.c.authored_by == "owner",
+                )
+                .order_by(conversation_messages.c.id.asc())
+                .offset(offset)
+                .limit(limit)
+            ).all()
+        return [
+            ConversationMessage(
+                id=int(row.id),
+                user_id=int(row.user_id),
+                role=row.role,
+                content=row.content,
+                created_at=datetime.fromisoformat(row.created_at),
+                authored_by=getattr(row, "authored_by", None),
+            )
+            for row in rows
+        ]
 
     def count_messages(self, user_id: int) -> int:
         with self._db.engine.connect() as connection:
@@ -107,6 +169,7 @@ class MemoryRepositoryImpl:
                 role=row.role,
                 content=row.content,
                 created_at=datetime.fromisoformat(row.created_at),
+                authored_by=getattr(row, "authored_by", None),
             )
             for row in rows
         ]
@@ -140,3 +203,43 @@ class MemoryRepositoryImpl:
                 update_columns=["summary", "covered_count", "updated_at"],
             )
         return summary
+
+    def get_style_profile(self, user_id: int) -> ContactStyleProfile | None:
+        with self._db.engine.connect() as connection:
+            row = connection.execute(
+                select(contact_style_profiles).where(
+                    contact_style_profiles.c.user_id == user_id
+                )
+            ).first()
+        if row is None:
+            return None
+        return ContactStyleProfile(
+            user_id=int(row.user_id),
+            profile=row.profile,
+            updated_at=datetime.fromisoformat(row.updated_at),
+            covered_count=int(getattr(row, "covered_count", 0) or 0),
+        )
+
+    def set_style_profile(self, profile: ContactStyleProfile) -> ContactStyleProfile:
+        with self._db.engine.begin() as connection:
+            upsert(
+                connection,
+                contact_style_profiles,
+                {
+                    "user_id": profile.user_id,
+                    "profile": profile.profile,
+                    "covered_count": profile.covered_count,
+                    "updated_at": profile.updated_at.isoformat(),
+                },
+                index_elements=["user_id"],
+                update_columns=["profile", "covered_count", "updated_at"],
+            )
+        return profile
+
+    def delete_style_profile(self, user_id: int) -> None:
+        with self._db.engine.begin() as connection:
+            connection.execute(
+                delete(contact_style_profiles).where(
+                    contact_style_profiles.c.user_id == user_id
+                )
+            )

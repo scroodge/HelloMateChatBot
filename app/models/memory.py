@@ -15,6 +15,9 @@ class ConversationMessage:
     content: str
     created_at: datetime
     id: int | None = None
+    # who actually authored the text: "contact", "owner" (real human reply), or
+    # "bot" (AI-generated). Legacy rows are NULL/None.
+    authored_by: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,3 +28,13 @@ class ConversationSummary:
     summary: str
     updated_at: datetime
     covered_count: int = 0  # number of oldest messages already folded into the summary
+
+
+@dataclass(frozen=True, slots=True)
+class ContactStyleProfile:
+    """Learned description of how the owner writes to a specific contact."""
+
+    user_id: int
+    profile: str
+    updated_at: datetime
+    covered_count: int = 0  # number of owner messages already folded into the profile

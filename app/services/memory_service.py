@@ -5,7 +5,11 @@ from __future__ import annotations
 from datetime import datetime
 
 from app.database.repositories.memory import MemoryRepository
-from app.models.memory import ConversationMessage, ConversationSummary
+from app.models.memory import (
+    ContactStyleProfile,
+    ConversationMessage,
+    ConversationSummary,
+)
 
 
 class MemoryService:
@@ -21,19 +25,25 @@ class MemoryService:
         content: str,
         now: datetime | None = None,
     ) -> ConversationMessage:
-        """Persist a user message."""
+        """Persist a contact (incoming) message."""
 
-        return self._record_message(user_id, "user", content, now)
+        return self._record_message(user_id, "user", content, now, authored_by="contact")
 
     def record_assistant_message(
         self,
         user_id: int,
         content: str,
         now: datetime | None = None,
+        authored_by: str = "bot",
     ) -> ConversationMessage:
-        """Persist an assistant message."""
+        """Persist an assistant-side message.
 
-        return self._record_message(user_id, "assistant", content, now)
+        ``authored_by`` distinguishes a real owner reply ("owner", typed by the
+        human in suggest/off mode) from an AI-generated one ("bot"). Only owner
+        replies feed the style-learning profile.
+        """
+
+        return self._record_message(user_id, "assistant", content, now, authored_by=authored_by)
 
     def _record_message(
         self,
@@ -41,12 +51,14 @@ class MemoryService:
         role: str,
         content: str,
         now: datetime | None,
+        authored_by: str | None = None,
     ) -> ConversationMessage:
         message = ConversationMessage(
             user_id=user_id,
             role=role,
             content=content,
             created_at=now or datetime.now().astimezone(),
+            authored_by=authored_by,
         )
         return self.repository.add_message(message)
 
@@ -88,6 +100,45 @@ class MemoryService:
         """Return messages oldest-first within [offset, offset+limit)."""
 
         return self.repository.list_messages_asc(user_id, offset=offset, limit=limit)
+
+    def count_owner_messages(self, user_id: int) -> int:
+        """Total owner-authored (real human) replies for a contact."""
+
+        return self.repository.count_owner_messages(user_id)
+
+    def owner_messages_slice(
+        self, user_id: int, *, offset: int, limit: int
+    ) -> list[ConversationMessage]:
+        """Return owner-authored messages oldest-first within [offset, offset+limit)."""
+
+        return self.repository.list_owner_messages_asc(user_id, offset=offset, limit=limit)
+
+    def get_style_profile(self, user_id: int) -> ContactStyleProfile | None:
+        """Return the learned owner-style profile for a contact."""
+
+        return self.repository.get_style_profile(user_id)
+
+    def set_style_profile(
+        self,
+        user_id: int,
+        profile: str,
+        covered_count: int = 0,
+        now: datetime | None = None,
+    ) -> ContactStyleProfile:
+        """Persist a learned owner-style profile for a contact."""
+
+        item = ContactStyleProfile(
+            user_id=user_id,
+            profile=profile,
+            updated_at=now or datetime.now().astimezone(),
+            covered_count=covered_count,
+        )
+        return self.repository.set_style_profile(item)
+
+    def delete_style_profile(self, user_id: int) -> None:
+        """Remove the learned owner-style profile for a contact."""
+
+        self.repository.delete_style_profile(user_id)
 
     def as_chat_messages(self, user_id: int) -> list[dict[str, str]]:
         """Return memory in LLM chat message format."""

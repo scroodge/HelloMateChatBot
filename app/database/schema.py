@@ -49,6 +49,8 @@ user_settings = Table(
     Column("persona_topics", Text),          # JSON list of allowed topics
     Column("persona_boundaries", Text),      # JSON list of forbidden topics
     Column("business_reply_mode", Text),     # "auto" | "suggest" | "off" | NULL=inherit global
+    Column("openness", Text),                # "open" | "neutral" | "reserved" | NULL=inherit global
+    Column("style_learning_enabled", Boolean, nullable=False, default=False),
     Column("updated_at", Text),
 )
 
@@ -89,6 +91,8 @@ conversation_messages = Table(
     Column("role", Text, nullable=False),
     Column("content", Text, nullable=False),
     Column("created_at", Text, nullable=False),
+    # "contact" | "owner" (real human reply) | "bot" (AI-generated) | NULL (legacy)
+    Column("authored_by", Text),
     Index("idx_conversation_messages_user_created", "user_id", "created_at"),
 )
 
@@ -98,6 +102,16 @@ conversation_summaries = Table(
     Column("user_id", Integer, primary_key=True, autoincrement=False),
     Column("summary", Text, nullable=False),
     # how many of the oldest messages are already folded into this summary
+    Column("covered_count", Integer, nullable=False, default=0),
+    Column("updated_at", Text, nullable=False),
+)
+
+contact_style_profiles = Table(
+    "contact_style_profiles",
+    metadata,
+    Column("user_id", Integer, primary_key=True, autoincrement=False),
+    Column("profile", Text, nullable=False),
+    # how many owner-authored messages are already folded into this profile
     Column("covered_count", Integer, nullable=False, default=0),
     Column("updated_at", Text, nullable=False),
 )

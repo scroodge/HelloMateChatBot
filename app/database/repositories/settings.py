@@ -48,6 +48,8 @@ def _row_to_settings(row) -> UserSettings:
         persona_topics=row.persona_topics,
         persona_boundaries=row.persona_boundaries,
         business_reply_mode=getattr(row, "business_reply_mode", None),
+        openness=getattr(row, "openness", None),
+        style_learning_enabled=bool(getattr(row, "style_learning_enabled", False)),
     )
 
 
@@ -82,6 +84,8 @@ class SettingsRepositoryImpl:
             "persona_topics": settings.persona_topics,
             "persona_boundaries": settings.persona_boundaries,
             "business_reply_mode": settings.business_reply_mode,
+            "openness": settings.openness,
+            "style_learning_enabled": settings.style_learning_enabled,
             "updated_at": now_iso(),
         }
         with self._db.engine.begin() as connection:

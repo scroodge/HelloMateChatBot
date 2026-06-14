@@ -56,6 +56,46 @@ def build_persona_prompt(language: str, display_name: str | None = None) -> str:
     return prompt
 
 
+def _openness_directive(openness: str, language: str) -> str:
+    """Return a strong trailing instruction controlling how open/guarded to be.
+
+    This is appended last to the system prompt so it overrides persona tone and
+    any learned style — the owner's lever for not being fully open with everyone.
+    """
+
+    if language == "ru":
+        directives = {
+            "open": (
+                " Стиль общения: будь максимально открытым и тёплым, как с близким "
+                "человеком; можно делиться личным и эмоциями."
+            ),
+            "neutral": (
+                " Стиль общения: дружелюбно, но умеренно; не раскрывай лишних "
+                "личных подробностей."
+            ),
+            "reserved": (
+                " Стиль общения: вежливо, но сдержанно и закрыто. Не делись личными "
+                "подробностями, не показывай лишних эмоций, отвечай по делу и коротко."
+            ),
+        }
+    else:
+        directives = {
+            "open": (
+                " Communication style: be fully open and warm, as with a close "
+                "person; sharing personal things and emotions is fine."
+            ),
+            "neutral": (
+                " Communication style: friendly but measured; do not reveal extra "
+                "personal details."
+            ),
+            "reserved": (
+                " Communication style: polite but reserved and guarded. Do not share "
+                "personal details, keep emotions minimal, answer briefly and to the point."
+            ),
+        }
+    return directives.get(openness, directives["neutral"])
+
+
 class ReplyService:
     """Build context-aware replies using memory, mood, and optional RAG."""
 
@@ -93,7 +133,7 @@ class ReplyService:
             reply = await self.llm_service.complete(messages)
             if _contains_cjk(reply):
                 reply = await self._rewrite_without_cjk(messages, reply, language)
-            self.memory_service.record_assistant_message(user_id, reply)
+            self.memory_service.record_assistant_message(user_id, reply, authored_by="bot")
             return reply
         except Exception:
             logger.exception("Failed to generate AI reply for user %s", user_id)
@@ -193,6 +233,23 @@ class ReplyService:
             system_prompt += f" Заметки: {rag_context}." if language == "ru" else f" Relevant notes: {rag_context}."
         if weather_context:
             system_prompt += f" {weather_context}"
+
+        openness = self.settings_service.get_openness(user_id)
+        settings = self.settings_service.get_user_settings(user_id)
+
+        # Owner-style mimicry: only when opted in for this contact AND the contact
+        # is not on a reserved footing (reserved = don't reveal the real you).
+        if settings.style_learning_enabled and openness != "reserved":
+            style = self.memory_service.get_style_profile(user_id)
+            if style is not None and style.profile:
+                system_prompt += (
+                    f" Подражай этой манере письма владельца: {style.profile}"
+                    if language == "ru"
+                    else f" Mimic the owner's writing style: {style.profile}"
+                )
+
+        # Openness directive goes LAST so it dominates the persona/tone above.
+        system_prompt += _openness_directive(openness, language)
 
         messages: list[dict[str, str]] = [{"role": "system", "content": system_prompt}]
         messages.extend(self.memory_service.as_chat_messages(user_id))

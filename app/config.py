@@ -69,6 +69,9 @@ class Config:
     summary_max_chars: int
     facts_enabled: bool
     facts_refresh_interval: int
+    style_enabled: bool
+    style_refresh_interval: int
+    style_max_chars: int
 
     @classmethod
     def from_env(cls) -> Config:
@@ -146,6 +149,14 @@ class Config:
         if facts_refresh_interval < 1:
             raise ConfigError("FACTS_REFRESH_INTERVAL must be >= 1.")
 
+        style_enabled = _parse_bool(os.getenv("STYLE_ENABLED", "true"), default=True)
+        style_refresh_interval = int(os.getenv("STYLE_REFRESH_INTERVAL", "5"))
+        if style_refresh_interval < 1:
+            raise ConfigError("STYLE_REFRESH_INTERVAL must be >= 1.")
+        style_max_chars = int(os.getenv("STYLE_MAX_CHARS", "800"))
+        if style_max_chars < 100:
+            raise ConfigError("STYLE_MAX_CHARS must be >= 100.")
+
         return cls(
             bot_token=bot_token,
             timezone=timezone,
@@ -182,4 +193,7 @@ class Config:
             summary_max_chars=summary_max_chars,
             facts_enabled=facts_enabled,
             facts_refresh_interval=facts_refresh_interval,
+            style_enabled=style_enabled,
+            style_refresh_interval=style_refresh_interval,
+            style_max_chars=style_max_chars,
         )

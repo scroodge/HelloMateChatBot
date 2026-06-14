@@ -373,9 +373,32 @@
         <option value="auto">Отвечать автоматически</option>
         <option value="off">Не отвечать</option>
       </select>
+      <label>Открытость (насколько раскрываться)</label>
+      <select id="f-openness">
+        <option value="">Наследовать глобальную</option>
+        <option value="open">Открыто — как с близким</option>
+        <option value="neutral">Нейтрально — умеренно</option>
+        <option value="reserved">Сдержанно — закрыто, по делу</option>
+      </select>
+      <div class="persona-source" id="openness-effective-label" style="margin-top:4px"></div>
+      <div class="divider"></div>
+      <div class="toggle-row">
+        <span class="toggle-label">Учиться моему стилю письма</span>
+        <label class="toggle"><input type="checkbox" id="f-style-learning"><span class="slider"></span></label>
+      </div>
+      <div class="persona-source" style="margin-top:2px">Бот скопирует твою манеру из реальных ответов этому контакту. При «сдержанно» стиль не применяется.</div>
       <div style="margin-top:10px">
         <button class="btn" onclick="saveContactSettings()">Сохранить настройки</button>
       </div>
+    </div>
+
+    <!-- learned style -->
+    <div class="card" id="style-card" style="display:none">
+      <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
+        <span>Выученный стиль</span>
+        <button class="btn btn-sm btn-secondary" onclick="clearStyle()" style="width:auto;font-size:11px">Сбросить</button>
+      </div>
+      <div id="detail-style" style="font-size:12px;white-space:pre-wrap;color:var(--hint)"></div>
     </div>
 
     <!-- known facts -->
@@ -624,6 +647,13 @@ async function openContact(userId) {
     document.getElementById('f-greeting-hour').value      = u.greeting_hour;
     document.getElementById('f-language').value           = u.language;
     document.getElementById('f-business-reply-mode').value = u.business_reply_mode || '';
+    document.getElementById('f-openness').value = u.openness || '';
+    document.getElementById('f-style-learning').checked = !!u.style_learning_enabled;
+    const effOpen = { open:'открыто', neutral:'нейтрально', reserved:'сдержанно' }[u.effective_openness] || u.effective_openness;
+    document.getElementById('openness-effective-label').textContent = 'Сейчас действует: ' + effOpen;
+
+    // learned style
+    renderStyle(u.style_profile);
 
     // known facts
     renderFacts(u.facts || {});
@@ -761,11 +791,14 @@ async function saveContactSettings() {
   if (!currentUserId) return;
   try {
     const mode = document.getElementById('f-business-reply-mode').value;
+    const openness = document.getElementById('f-openness').value;
     await put('/admin/users/' + currentUserId + '/settings', {
-      greeting_enabled:      document.getElementById('f-greeting-enabled').checked,
-      greeting_hour:         parseInt(document.getElementById('f-greeting-hour').value),
-      language:              document.getElementById('f-language').value,
-      business_reply_mode:   mode || null,
+      greeting_enabled:        document.getElementById('f-greeting-enabled').checked,
+      greeting_hour:           parseInt(document.getElementById('f-greeting-hour').value),
+      language:                document.getElementById('f-language').value,
+      business_reply_mode:     mode || null,
+      openness:                openness || null,
+      style_learning_enabled:  document.getElementById('f-style-learning').checked,
     });
     tg.showAlert('Настройки сохранены');
   } catch(e) {
@@ -828,6 +861,30 @@ async function clearAllFacts() {
   try {
     await del(`/admin/users/${currentUserId}/facts`);
     renderFacts({});
+  } catch(e) {
+    tg.showAlert('Ошибка: ' + e.message);
+  }
+}
+
+// ── Learned style ────────────────────────────────────────────────────────────
+
+function renderStyle(profile) {
+  const card = document.getElementById('style-card');
+  const el = document.getElementById('detail-style');
+  if (profile && profile.trim()) {
+    card.style.display = '';
+    el.textContent = profile;
+  } else {
+    card.style.display = 'none';
+    el.textContent = '';
+  }
+}
+
+async function clearStyle() {
+  if (!currentUserId) return;
+  try {
+    await del('/admin/users/' + currentUserId + '/style');
+    renderStyle(null);
   } catch(e) {
     tg.showAlert('Ошибка: ' + e.message);
   }

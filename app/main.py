@@ -68,6 +68,7 @@ from app.services.rag_service import RAGService
 from app.services.reply_debounce_service import ReplyDebounceService
 from app.services.reply_service import ReplyService
 from app.services.settings_service import SettingsService
+from app.services.style_service import StyleService
 from app.services.summary_service import SummaryService
 from app.services.weather_service import WeatherService
 
@@ -137,6 +138,14 @@ def build_application(config: Config, database: Database):
         refresh_interval=config.facts_refresh_interval,
         enabled=config.facts_enabled and config.ai_replies_enabled,
     )
+    style_service = StyleService(
+        memory_service=memory_service,
+        llm_service=llm_service,
+        settings_service=settings_service,
+        refresh_interval=config.style_refresh_interval,
+        max_chars=config.style_max_chars,
+        enabled=config.style_enabled and config.ai_replies_enabled,
+    )
     reply_service = ReplyService(
         llm_service=llm_service,
         memory_service=memory_service,
@@ -161,6 +170,7 @@ def build_application(config: Config, database: Database):
     application.bot_data["reply_debounce_service"] = reply_debounce_service
     application.bot_data["summary_service"] = summary_service
     application.bot_data["facts_service"] = facts_service
+    application.bot_data["style_service"] = style_service
     application.bot_data["reply_service"] = reply_service
     application.bot_data["persona_service"] = persona_service
     application.bot_data["event_service"] = event_service
