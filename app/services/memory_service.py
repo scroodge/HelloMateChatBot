@@ -64,16 +64,30 @@ class MemoryService:
         self,
         user_id: int,
         summary: str,
+        covered_count: int = 0,
         now: datetime | None = None,
     ) -> ConversationSummary:
-        """Persist a conversation summary."""
+        """Persist a conversation summary and how many oldest messages it covers."""
 
         item = ConversationSummary(
             user_id=user_id,
             summary=summary,
             updated_at=now or datetime.now().astimezone(),
+            covered_count=covered_count,
         )
         return self.repository.set_summary(item)
+
+    def count_messages(self, user_id: int) -> int:
+        """Total stored messages for a user."""
+
+        return self.repository.count_messages(user_id)
+
+    def messages_slice(
+        self, user_id: int, *, offset: int, limit: int
+    ) -> list[ConversationMessage]:
+        """Return messages oldest-first within [offset, offset+limit)."""
+
+        return self.repository.list_messages_asc(user_id, offset=offset, limit=limit)
 
     def as_chat_messages(self, user_id: int) -> list[dict[str, str]]:
         """Return memory in LLM chat message format."""

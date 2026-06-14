@@ -24,3 +24,4 @@ class ConversationSummary:
     user_id: int
     summary: str
     updated_at: datetime
+    covered_count: int = 0  # number of oldest messages already folded into the summary

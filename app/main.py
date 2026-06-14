@@ -67,6 +67,7 @@ from app.services.rag_service import RAGService
 from app.services.reply_debounce_service import ReplyDebounceService
 from app.services.reply_service import ReplyService
 from app.services.settings_service import SettingsService
+from app.services.summary_service import SummaryService
 from app.services.weather_service import WeatherService
 
 logger = logging.getLogger(__name__)
@@ -118,6 +119,15 @@ def build_application(config: Config, database: Database):
     )
     business_service = BusinessService(database.business)
     reply_debounce_service = ReplyDebounceService(config.reply_debounce_seconds)
+    summary_service = SummaryService(
+        memory_service=memory_service,
+        llm_service=llm_service,
+        settings_service=settings_service,
+        window_size=config.memory_window_size,
+        refresh_interval=config.summary_refresh_interval,
+        max_chars=config.summary_max_chars,
+        enabled=config.summary_enabled and config.ai_replies_enabled,
+    )
     reply_service = ReplyService(
         llm_service=llm_service,
         memory_service=memory_service,
@@ -139,6 +149,7 @@ def build_application(config: Config, database: Database):
     application.bot_data["memory_service"] = memory_service
     application.bot_data["business_service"] = business_service
     application.bot_data["reply_debounce_service"] = reply_debounce_service
+    application.bot_data["summary_service"] = summary_service
     application.bot_data["reply_service"] = reply_service
     application.bot_data["persona_service"] = persona_service
     application.bot_data["event_service"] = event_service
@@ -245,7 +256,7 @@ def main() -> None:
             logger.info("API server started on %s:%s", config.api_host, config.api_port)
             if config.mini_app_dev:
                 logger.warning(
-                    "MINI_APP_DEV is enabled — open http://127.0.0.1:%s in a browser for local testing",
+                    "MINI_APP_DEV is enabled — open http://127.0.0.1:%s in a browser",
                     config.api_port,
                 )
 

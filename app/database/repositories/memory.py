@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING, Protocol
 
-from sqlalchemy import insert, select
+from sqlalchemy import func, insert, select
 
 from app.database.schema import conversation_messages, conversation_summaries
 from app.database.util import upsert
@@ -21,6 +21,12 @@ class MemoryRepository(Protocol):
     def add_message(self, message: ConversationMessage) -> ConversationMessage: ...
 
     def list_messages(self, user_id: int, limit: int = 20) -> list[ConversationMessage]: ...
+
+    def count_messages(self, user_id: int) -> int: ...
+
+    def list_messages_asc(
+        self, user_id: int, *, offset: int, limit: int
+    ) -> list[ConversationMessage]: ...
 
     def get_summary(self, user_id: int) -> ConversationSummary | None: ...
 
@@ -73,6 +79,38 @@ class MemoryRepositoryImpl:
         messages.reverse()
         return messages
 
+    def count_messages(self, user_id: int) -> int:
+        with self._db.engine.connect() as connection:
+            return int(
+                connection.execute(
+                    select(func.count())
+                    .select_from(conversation_messages)
+                    .where(conversation_messages.c.user_id == user_id)
+                ).scalar_one()
+            )
+
+    def list_messages_asc(
+        self, user_id: int, *, offset: int, limit: int
+    ) -> list[ConversationMessage]:
+        with self._db.engine.connect() as connection:
+            rows = connection.execute(
+                select(conversation_messages)
+                .where(conversation_messages.c.user_id == user_id)
+                .order_by(conversation_messages.c.id.asc())
+                .offset(offset)
+                .limit(limit)
+            ).all()
+        return [
+            ConversationMessage(
+                id=int(row.id),
+                user_id=int(row.user_id),
+                role=row.role,
+                content=row.content,
+                created_at=datetime.fromisoformat(row.created_at),
+            )
+            for row in rows
+        ]
+
     def get_summary(self, user_id: int) -> ConversationSummary | None:
         with self._db.engine.connect() as connection:
             row = connection.execute(
@@ -84,6 +122,7 @@ class MemoryRepositoryImpl:
             user_id=int(row.user_id),
             summary=row.summary,
             updated_at=datetime.fromisoformat(row.updated_at),
+            covered_count=int(getattr(row, "covered_count", 0) or 0),
         )
 
     def set_summary(self, summary: ConversationSummary) -> ConversationSummary:
@@ -94,9 +133,10 @@ class MemoryRepositoryImpl:
                 {
                     "user_id": summary.user_id,
                     "summary": summary.summary,
+                    "covered_count": summary.covered_count,
                     "updated_at": summary.updated_at.isoformat(),
                 },
                 index_elements=["user_id"],
-                update_columns=["summary", "updated_at"],
+                update_columns=["summary", "covered_count", "updated_at"],
             )
         return summary

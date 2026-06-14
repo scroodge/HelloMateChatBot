@@ -97,6 +97,8 @@ conversation_summaries = Table(
     metadata,
     Column("user_id", Integer, primary_key=True, autoincrement=False),
     Column("summary", Text, nullable=False),
+    # how many of the oldest messages are already folded into this summary
+    Column("covered_count", Integer, nullable=False, default=0),
     Column("updated_at", Text, nullable=False),
 )
 

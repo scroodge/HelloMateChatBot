@@ -22,6 +22,7 @@ from app.services.profile_service import ProfileService
 from app.services.reply_debounce_service import ReplyDebounceService
 from app.services.reply_service import ReplyService
 from app.services.settings_service import SettingsService
+from app.services.summary_service import SummaryService
 
 logger = logging.getLogger(__name__)
 
@@ -139,6 +140,10 @@ async def _process_incoming_text(
 
     if isinstance(event_service, EventService):
         event_service.record(contact_user_id, MESSAGE_RECEIVED)
+
+    summary_service = context.bot_data.get("summary_service")
+    if isinstance(summary_service, SummaryService) and message_text:
+        summary_service.schedule_refresh(contact_user_id)
 
     if sender_is_owner:
         return

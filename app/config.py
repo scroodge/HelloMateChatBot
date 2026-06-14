@@ -64,6 +64,9 @@ class Config:
     bot_name: str
     business_mode_enabled: bool
     reply_debounce_seconds: float
+    summary_enabled: bool
+    summary_refresh_interval: int
+    summary_max_chars: int
 
     @classmethod
     def from_env(cls) -> Config:
@@ -128,6 +131,14 @@ class Config:
         if reply_debounce_seconds < 0:
             raise ConfigError("REPLY_DEBOUNCE_SECONDS must be >= 0.")
 
+        summary_enabled = _parse_bool(os.getenv("SUMMARY_ENABLED", "true"), default=True)
+        summary_refresh_interval = int(os.getenv("SUMMARY_REFRESH_INTERVAL", "10"))
+        if summary_refresh_interval < 1:
+            raise ConfigError("SUMMARY_REFRESH_INTERVAL must be >= 1.")
+        summary_max_chars = int(os.getenv("SUMMARY_MAX_CHARS", "1500"))
+        if summary_max_chars < 100:
+            raise ConfigError("SUMMARY_MAX_CHARS must be >= 100.")
+
         return cls(
             bot_token=bot_token,
             timezone=timezone,
@@ -159,4 +170,7 @@ class Config:
             bot_name=bot_name,
             business_mode_enabled=business_mode_enabled,
             reply_debounce_seconds=reply_debounce_seconds,
+            summary_enabled=summary_enabled,
+            summary_refresh_interval=summary_refresh_interval,
+            summary_max_chars=summary_max_chars,
         )

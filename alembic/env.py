@@ -40,9 +40,11 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     cfg = config.get_section(config.config_ini_section, {})
-    # Respect URL set programmatically (e.g. by Database._provision_schema);
-    # fall back to env-based resolution only when running alembic CLI directly.
-    if not cfg.get("sqlalchemy.url"):
+    # Respect a URL set programmatically (e.g. by Database._provision_schema);
+    # otherwise resolve from the environment. The alembic.ini ships a
+    # "driver://..." placeholder — treat that as unset so the CLI works too.
+    configured = cfg.get("sqlalchemy.url", "")
+    if not configured or configured.startswith("driver://"):
         cfg["sqlalchemy.url"] = _resolve_url()
     connectable = engine_from_config(cfg, prefix="sqlalchemy.", poolclass=pool.NullPool)
 
