@@ -5,5 +5,19 @@ services:
     env_file: .env
     volumes:
       - ./data:/app/data
+    ports:
+      - "8080:8080"
     restart: unless-stopped
 
+  ollama:
+    profiles: ["ai"]
+    image: ollama/ollama:latest
+    container_name: hellomate-ollama
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+    restart: unless-stopped
+
+volumes:
+  ollama_data:

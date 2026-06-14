@@ -3,20 +3,9 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Protocol
 from zoneinfo import ZoneInfo
 
-
-class GreetingRepository(Protocol):
-    """Persistence contract used by GreetingService."""
-
-    def get_last_greeting_date(self, user_id: int) -> date | None:
-        """Return the last greeting date for a user, if present."""
-        ...
-
-    def set_last_greeting_date(self, user_id: int, greeting_date: date) -> None:
-        """Persist the last greeting date for a user."""
-        ...
+from app.database.repositories.greeting import GreetingRepository
 
 
 class GreetingService:
@@ -43,3 +32,13 @@ class GreetingService:
 
         self.repository.set_last_greeting_date(user_id, greeting_date)
         return True
+
+    def get_last_greeting_date(self, user_id: int) -> date | None:
+        """Return the last greeting date for a user."""
+
+        return self.repository.get_last_greeting_date(user_id)
+
+    def list_user_ids(self) -> list[int]:
+        """Return all known user IDs."""
+
+        return self.repository.list_user_ids()

@@ -13,4 +13,5 @@ select = ["E", "F", "I", "UP", "B"]
 testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "-q"
+asyncio_mode = "auto"
 

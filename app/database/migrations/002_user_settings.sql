@@ -1,0 +1,14 @@
+CREATE TABLE IF NOT EXISTS user_settings (
+    user_id INTEGER PRIMARY KEY,
+    language TEXT NOT NULL DEFAULT 'ru',
+    greeting_enabled INTEGER NOT NULL DEFAULT 1,
+    greeting_hour INTEGER NOT NULL DEFAULT 9,
+    use_starters INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS bot_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

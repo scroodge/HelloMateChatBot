@@ -65,4 +65,3 @@ def test_timezone_aware_date_logic_uses_configured_timezone() -> None:
     today = service.today(datetime(2026, 5, 20, 22, 30, tzinfo=ZoneInfo("UTC")))
 
     assert today == date(2026, 5, 21)
-

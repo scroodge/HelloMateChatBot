@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HelloMate Dashboard</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        margin: 0;
+        padding: 16px;
+        background: var(--tg-theme-bg-color, #ffffff);
+        color: var(--tg-theme-text-color, #111111);
+      }
+      h1,
+      h2 {
+        margin: 0 0 12px;
+      }
+      .card {
+        background: var(--tg-theme-secondary-bg-color, #f4f4f5);
+        border-radius: 12px;
+        padding: 14px;
+        margin-bottom: 12px;
+      }
+      .message {
+        margin-bottom: 8px;
+      }
+      .role {
+        font-size: 12px;
+        opacity: 0.7;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>HelloMate</h1>
+    <div id="profile" class="card">Loading profile...</div>
+    <div class="card">
+      <h2>Mood</h2>
+      <div id="mood">Loading mood...</div>
+    </div>
+    <div class="card">
+      <h2>Recent messages</h2>
+      <div id="memory">Loading memory...</div>
+    </div>
+    <script>
+      const tg = window.Telegram.WebApp;
+      tg.ready();
+      tg.expand();
+
+      const initData = tg.initData;
+
+      async function apiGet(path) {
+        const response = await fetch(`/api${path}`, {
+          headers: { "X-Telegram-Init-Data": initData },
+        });
+        if (!response.ok) {
+          throw new Error(`Request failed: ${response.status}`);
+        }
+        return response.json();
+      }
+
+      async function loadDashboard() {
+        try {
+          const profile = await apiGet("/profile");
+          document.getElementById("profile").innerHTML = `
+            <h2>Profile</h2>
+            <div><strong>Name:</strong> ${profile.display_name || "Unknown"}</div>
+            <div><strong>Language:</strong> ${profile.language}</div>
+            <div><strong>Timezone:</strong> ${profile.timezone}</div>
+          `;
+
+          const mood = await apiGet("/mood");
+          document.getElementById("mood").innerHTML = mood.length
+            ? mood
+                .map(
+                  (entry) =>
+                    `<div>${entry.recorded_at.slice(0, 10)}: ${entry.mood}/5 ${
+                      entry.note || ""
+                    }</div>`
+                )
+                .join("")
+            : "No mood entries yet.";
+
+          const memory = await apiGet("/memory");
+          document.getElementById("memory").innerHTML = memory.length
+            ? memory
+                .map(
+                  (message) =>
+                    `<div class="message"><div class="role">${message.role}</div>${message.content}</div>`
+                )
+                .join("")
+            : "No messages yet.";
+        } catch (error) {
+          document.getElementById("profile").textContent = "Failed to load dashboard.";
+          console.error(error);
+        }
+      }
+
+      loadDashboard();
+    </script>
+  </body>
+</html>

@@ -19,4 +19,6 @@ RUN mkdir -p /app/data \
 
 USER hellomate
 
+EXPOSE 8080
+
 CMD ["python", "-m", "app.main"]
