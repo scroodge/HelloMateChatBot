@@ -8,6 +8,7 @@ from datetime import datetime
 
 from telegram.ext import ContextTypes
 
+from app.services.contact_facts_service import ContactFactsService
 from app.services.conversation_starter_service import ConversationStarterService
 from app.services.event_service import (
     AI_REPLY_SENT,
@@ -144,6 +145,10 @@ async def _process_incoming_text(
     summary_service = context.bot_data.get("summary_service")
     if isinstance(summary_service, SummaryService) and message_text:
         summary_service.schedule_refresh(contact_user_id)
+
+    facts_service = context.bot_data.get("facts_service")
+    if isinstance(facts_service, ContactFactsService) and message_text and not sender_is_owner:
+        facts_service.schedule_extraction(contact_user_id)
 
     if sender_is_owner:
         return

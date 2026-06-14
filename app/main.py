@@ -52,6 +52,7 @@ from app.handlers.mood import mood_command, mood_history_command
 from app.handlers.voice import private_voice_message
 from app.jobs.greeting_jobs import register_greeting_jobs
 from app.services.business_service import BusinessService
+from app.services.contact_facts_service import ContactFactsService
 from app.services.conversation_starter_service import ConversationStarterService
 from app.services.embedding_service import EmbeddingService
 from app.services.event_service import EventService
@@ -128,6 +129,14 @@ def build_application(config: Config, database: Database):
         max_chars=config.summary_max_chars,
         enabled=config.summary_enabled and config.ai_replies_enabled,
     )
+    facts_service = ContactFactsService(
+        repository=database.facts,
+        memory_service=memory_service,
+        llm_service=llm_service,
+        settings_service=settings_service,
+        refresh_interval=config.facts_refresh_interval,
+        enabled=config.facts_enabled and config.ai_replies_enabled,
+    )
     reply_service = ReplyService(
         llm_service=llm_service,
         memory_service=memory_service,
@@ -136,6 +145,7 @@ def build_application(config: Config, database: Database):
         settings_service=settings_service,
         rag_service=rag_service,
         weather_service=weather_service,
+        facts_service=facts_service,
         enabled=config.ai_replies_enabled,
     )
 
@@ -150,6 +160,7 @@ def build_application(config: Config, database: Database):
     application.bot_data["business_service"] = business_service
     application.bot_data["reply_debounce_service"] = reply_debounce_service
     application.bot_data["summary_service"] = summary_service
+    application.bot_data["facts_service"] = facts_service
     application.bot_data["reply_service"] = reply_service
     application.bot_data["persona_service"] = persona_service
     application.bot_data["event_service"] = event_service

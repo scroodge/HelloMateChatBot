@@ -19,6 +19,7 @@ from app.database.repositories.business import BusinessRepositoryImpl
 from app.database.schema import metadata
 from app.database.repositories.documents import DocumentRepositoryImpl
 from app.database.repositories.events import EventRepositoryImpl
+from app.database.repositories.facts import ContactFactsRepositoryImpl
 from app.database.repositories.greeting import GreetingRepositoryImpl
 from app.database.repositories.greeting_rules import GreetingRulesRepositoryImpl
 from app.database.repositories.memory import MemoryRepositoryImpl
@@ -34,6 +35,7 @@ class Database:
         self._engine: Engine | None = None
         self.business = BusinessRepositoryImpl(self)
         self.events = EventRepositoryImpl(self)
+        self.facts = ContactFactsRepositoryImpl(self)
         self.greetings = GreetingRepositoryImpl(self)
         self.greeting_rules = GreetingRulesRepositoryImpl(self)
         self.settings = SettingsRepositoryImpl(self)

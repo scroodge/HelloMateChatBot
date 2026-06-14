@@ -14,6 +14,7 @@ from pydantic import BaseModel
 
 from app.api.auth import validate_init_data
 from app.database.repositories.events import EventRepository
+from app.services.contact_facts_service import ContactFactsService
 from app.services.greeting_rules_service import GreetingRulesService
 from app.services.greeting_service import GreetingService
 from app.services.memory_service import MemoryService
@@ -54,6 +55,10 @@ class UserSettingsWriteRequest(BaseModel):
     business_reply_mode: str | None = None  # "auto" | "suggest" | "off" | null=inherit global
 
 
+class ContactFactWriteRequest(BaseModel):
+    value: str
+
+
 # ---------------------------------------------------------------------------
 # Router factory
 # ---------------------------------------------------------------------------
@@ -71,6 +76,7 @@ def create_admin_router(
     greeting_service: GreetingService,
     greeting_rules_service: GreetingRulesService,
     event_repository: EventRepository | None = None,
+    facts_service: ContactFactsService | None = None,
     *,
     mini_app_dev: bool = False,
     dev_user_id: int | None = None,
@@ -159,6 +165,12 @@ def create_admin_router(
             except (json.JSONDecodeError, TypeError):
                 boundaries_parsed = None
 
+        contact_facts = (
+            {f.key: f.value for f in facts_service.get_facts(user_id)}
+            if facts_service is not None
+            else {}
+        )
+
         return {
             "user_id": user_id,
             "display_name": profile.display_name if profile else None,
@@ -185,6 +197,7 @@ def create_admin_router(
                 {"role": m.role, "content": m.content, "created_at": m.created_at.isoformat()}
                 for m in recent_messages
             ],
+            "facts": contact_facts,
         }
 
     # -----------------------------------------------------------------------
@@ -306,6 +319,48 @@ def create_admin_router(
             "business_reply_mode": saved.business_reply_mode,
             "effective_business_reply_mode": settings_service.get_business_reply_mode(user_id),
         }
+
+    # -----------------------------------------------------------------------
+    # 11: Contact facts
+    # -----------------------------------------------------------------------
+
+    @router.get("/users/{user_id}/facts")
+    async def get_facts(user_id: int, caller_id: int = AdminUser) -> dict[str, str]:
+        """Return all durable facts extracted for a contact."""
+        if facts_service is None:
+            return {}
+        return facts_service.facts_as_dict(user_id)
+
+    @router.put("/users/{user_id}/facts/{key}")
+    async def set_fact(
+        user_id: int, key: str, request: ContactFactWriteRequest, caller_id: int = AdminUser
+    ) -> dict[str, str]:
+        """Manually set or override a fact for a contact."""
+        if facts_service is None:
+            raise HTTPException(status_code=503, detail="Facts service not enabled")
+        try:
+            facts_service.set_fact(user_id, key, request.value.strip())
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return facts_service.facts_as_dict(user_id)
+
+    @router.delete("/users/{user_id}/facts/{key}")
+    async def delete_fact(
+        user_id: int, key: str, caller_id: int = AdminUser
+    ) -> dict[str, str]:
+        """Delete a single fact for a contact."""
+        if facts_service is None:
+            raise HTTPException(status_code=503, detail="Facts service not enabled")
+        facts_service.delete_fact(user_id, key)
+        return facts_service.facts_as_dict(user_id)
+
+    @router.delete("/users/{user_id}/facts")
+    async def clear_facts(user_id: int, caller_id: int = AdminUser) -> dict[str, str]:
+        """Delete all facts for a contact."""
+        if facts_service is None:
+            raise HTTPException(status_code=503, detail="Facts service not enabled")
+        facts_service.clear_facts(user_id)
+        return {}
 
     @router.get("/settings")
     async def get_global_settings(caller_id: int = AdminUser) -> dict[str, Any]:

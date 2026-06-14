@@ -157,6 +157,24 @@ business_chats = Table(
     Index("idx_business_chats_connection", "connection_id"),
 )
 
+contact_facts = Table(
+    "contact_facts",
+    metadata,
+    Column("user_id", Integer, nullable=False),
+    Column("key", Text, nullable=False),
+    Column("value", Text, nullable=False),
+    Column("updated_at", Text, nullable=False),
+    Index("pk_contact_facts", "user_id", "key", unique=True),
+)
+
+contact_facts_meta = Table(
+    "contact_facts_meta",
+    metadata,
+    Column("user_id", Integer, primary_key=True, autoincrement=False),
+    Column("last_message_count", Integer, nullable=False, default=0),
+    Column("updated_at", Text, nullable=False),
+)
+
 user_greeting_rules = Table(
     "user_greeting_rules",
     metadata,

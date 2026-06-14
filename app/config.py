@@ -67,6 +67,8 @@ class Config:
     summary_enabled: bool
     summary_refresh_interval: int
     summary_max_chars: int
+    facts_enabled: bool
+    facts_refresh_interval: int
 
     @classmethod
     def from_env(cls) -> Config:
@@ -139,6 +141,11 @@ class Config:
         if summary_max_chars < 100:
             raise ConfigError("SUMMARY_MAX_CHARS must be >= 100.")
 
+        facts_enabled = _parse_bool(os.getenv("FACTS_ENABLED", "true"), default=True)
+        facts_refresh_interval = int(os.getenv("FACTS_REFRESH_INTERVAL", "5"))
+        if facts_refresh_interval < 1:
+            raise ConfigError("FACTS_REFRESH_INTERVAL must be >= 1.")
+
         return cls(
             bot_token=bot_token,
             timezone=timezone,
@@ -173,4 +180,6 @@ class Config:
             summary_enabled=summary_enabled,
             summary_refresh_interval=summary_refresh_interval,
             summary_max_chars=summary_max_chars,
+            facts_enabled=facts_enabled,
+            facts_refresh_interval=facts_refresh_interval,
         )

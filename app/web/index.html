@@ -378,6 +378,33 @@
       </div>
     </div>
 
+    <!-- known facts -->
+    <div class="card">
+      <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
+        <span>Факты о контакте</span>
+        <button class="btn btn-sm btn-secondary" onclick="clearAllFacts()" style="width:auto;font-size:11px">Очистить</button>
+      </div>
+      <div id="detail-facts"><span class="empty">Фактов пока нет</span></div>
+      <div class="add-tag-row" style="margin-top:8px">
+        <select id="fact-key-select" style="flex:0 0 auto;width:120px">
+          <option value="name">Имя</option>
+          <option value="age">Возраст</option>
+          <option value="birthday">День рождения</option>
+          <option value="city">Город</option>
+          <option value="country">Страна</option>
+          <option value="occupation">Профессия</option>
+          <option value="workplace">Работа</option>
+          <option value="interests">Интересы</option>
+          <option value="relationship">Отношения</option>
+          <option value="family">Семья</option>
+          <option value="language">Язык</option>
+          <option value="notes">Заметки</option>
+        </select>
+        <input type="text" id="fact-value-input" placeholder="значение">
+        <button class="btn btn-sm" onclick="saveFact()">+</button>
+      </div>
+    </div>
+
     <!-- recent messages -->
     <div class="card">
       <div class="card-title">Последние сообщения</div>
@@ -483,9 +510,10 @@ async function api(method, path, body) {
   return r.json();
 }
 
-const get  = (path)        => api('GET',  path);
-const post = (path, body)  => api('POST', path, body);
-const put  = (path, body)  => api('PUT',  path, body);
+const get  = (path)        => api('GET',    path);
+const post = (path, body)  => api('POST',   path, body);
+const put  = (path, body)  => api('PUT',    path, body);
+const del  = (path)        => api('DELETE', path);
 
 // ── State ────────────────────────────────────────────────────────────────────
 
@@ -596,6 +624,9 @@ async function openContact(userId) {
     document.getElementById('f-greeting-hour').value      = u.greeting_hour;
     document.getElementById('f-language').value           = u.language;
     document.getElementById('f-business-reply-mode').value = u.business_reply_mode || '';
+
+    // known facts
+    renderFacts(u.facts || {});
 
     // recent messages
     const msgs = u.recent_messages || [];
@@ -737,6 +768,66 @@ async function saveContactSettings() {
       business_reply_mode:   mode || null,
     });
     tg.showAlert('Настройки сохранены');
+  } catch(e) {
+    tg.showAlert('Ошибка: ' + e.message);
+  }
+}
+
+// ── Contact facts ────────────────────────────────────────────────────────────
+
+const FACT_LABELS = {
+  name: 'Имя', age: 'Возраст', birthday: 'День рождения',
+  city: 'Город', country: 'Страна', occupation: 'Профессия',
+  workplace: 'Работа', interests: 'Интересы', relationship: 'Отношения',
+  family: 'Семья', language: 'Язык', notes: 'Заметки',
+};
+
+function renderFacts(facts) {
+  const el = document.getElementById('detail-facts');
+  const entries = Object.entries(facts);
+  if (!entries.length) {
+    el.innerHTML = '<span class="empty">Фактов пока нет — бот накопит их автоматически</span>';
+    return;
+  }
+  el.innerHTML = entries.map(([k, v]) =>
+    `<div class="tag-row" style="margin-bottom:6px;align-items:center">
+      <span style="font-size:11px;color:var(--hint);width:90px;flex-shrink:0">${FACT_LABELS[k] || k}</span>
+      <span class="tag" style="flex:1;max-width:none;cursor:default">${escHtml(v)}
+        <span class="tag-del" onclick="deleteFact('${escHtml(k)}')">×</span>
+      </span>
+    </div>`
+  ).join('');
+}
+
+async function saveFact() {
+  if (!currentUserId) return;
+  const key   = document.getElementById('fact-key-select').value;
+  const value = document.getElementById('fact-value-input').value.trim();
+  if (!value) return;
+  try {
+    const facts = await put(`/admin/users/${currentUserId}/facts/${key}`, { value });
+    renderFacts(facts);
+    document.getElementById('fact-value-input').value = '';
+  } catch(e) {
+    tg.showAlert('Ошибка: ' + e.message);
+  }
+}
+
+async function deleteFact(key) {
+  if (!currentUserId) return;
+  try {
+    const facts = await del(`/admin/users/${currentUserId}/facts/${key}`);
+    renderFacts(facts);
+  } catch(e) {
+    tg.showAlert('Ошибка: ' + e.message);
+  }
+}
+
+async function clearAllFacts() {
+  if (!currentUserId) return;
+  try {
+    await del(`/admin/users/${currentUserId}/facts`);
+    renderFacts({});
   } catch(e) {
     tg.showAlert('Ошибка: ' + e.message);
   }

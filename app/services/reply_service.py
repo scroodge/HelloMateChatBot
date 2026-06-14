@@ -68,6 +68,7 @@ class ReplyService:
         settings_service: SettingsService,
         rag_service: RAGService | None = None,
         weather_service: WeatherService | None = None,
+        facts_service: object | None = None,
         enabled: bool = False,
     ) -> None:
         self.llm_service = llm_service
@@ -77,6 +78,7 @@ class ReplyService:
         self.settings_service = settings_service
         self.rag_service = rag_service
         self.weather_service = weather_service
+        self.facts_service = facts_service
         self.enabled = enabled
 
     async def generate_reply(self, user_id: int, user_message: str) -> str | None:
@@ -178,6 +180,15 @@ class ReplyService:
                 if language == "ru"
                 else f" Conversation summary: {summary.summary}."
             )
+        if self.facts_service is not None:
+            facts = self.facts_service.facts_as_dict(user_id)
+            if facts:
+                facts_str = "; ".join(f"{k}={v}" for k, v in facts.items())
+                system_prompt += (
+                    f" Известные факты о контакте: {facts_str}."
+                    if language == "ru"
+                    else f" Known facts about this contact: {facts_str}."
+                )
         if rag_context:
             system_prompt += f" Заметки: {rag_context}." if language == "ru" else f" Relevant notes: {rag_context}."
         if weather_context:
