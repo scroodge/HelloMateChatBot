@@ -48,6 +48,7 @@ class Config:
     llm_provider: str
     llm_base_url: str
     llm_model: str
+    llm_embedding_model: str
     llm_api_key: str
     llm_max_tokens: int
     ai_replies_enabled: bool
@@ -98,6 +99,7 @@ class Config:
         llm_provider = os.getenv("LLM_PROVIDER", "ollama").strip().lower() or "ollama"
         llm_base_url = os.getenv("LLM_BASE_URL", "http://localhost:11434").strip()
         llm_model = os.getenv("LLM_MODEL", "llama3.2").strip()
+        llm_embedding_model = os.getenv("LLM_EMBEDDING_MODEL", "bge-m3:latest").strip()
         llm_api_key = os.getenv("LLM_API_KEY", "").strip()
         llm_max_tokens = int(os.getenv("LLM_MAX_TOKENS", "512"))
         ai_replies_enabled = _parse_bool(os.getenv("AI_REPLIES_ENABLED", "false"))
@@ -123,6 +125,7 @@ class Config:
             llm_provider=llm_provider,
             llm_base_url=llm_base_url,
             llm_model=llm_model,
+            llm_embedding_model=llm_embedding_model,
             llm_api_key=llm_api_key,
             llm_max_tokens=llm_max_tokens,
             ai_replies_enabled=ai_replies_enabled,

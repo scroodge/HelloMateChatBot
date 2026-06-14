@@ -42,10 +42,10 @@ class EmbeddingService:
         return _pack_embedding(embedding)
 
     async def _embed_openai(self, text: str) -> bytes:
-        if not self.api_key:
-            raise RuntimeError("LLM_API_KEY is required for OpenAI embeddings.")
         payload = {"model": self.model, "input": text}
-        headers = {"Authorization": f"Bearer {self.api_key}"}
+        headers: dict[str, str] = {}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
                 f"{self.base_url}/v1/embeddings",

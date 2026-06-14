@@ -81,7 +81,7 @@ def build_application(config: Config, database: SQLiteDatabase):
     llm_service = LLMService(llm_provider)
     embedding_service = EmbeddingService(
         base_url=config.llm_base_url,
-        model="nomic-embed-text",
+        model=config.llm_embedding_model,
         api_key=config.llm_api_key,
         provider=config.llm_provider,
     )

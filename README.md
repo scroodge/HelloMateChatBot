@@ -132,7 +132,8 @@ chmod +x update.sh
 | `MEMORY_WINDOW_SIZE` | `20` | Conversation memory window |
 | `LLM_PROVIDER` | `ollama` | `ollama` or `openai` |
 | `LLM_BASE_URL` | `http://localhost:11434` | LLM API base URL |
-| `LLM_MODEL` | `llama3.2` | Model name |
+| `LLM_MODEL` | `llama3.2` | Chat model name |
+| `LLM_EMBEDDING_MODEL` | `bge-m3:latest` | Embedding model for RAG (`/remember`) |
 | `LLM_API_KEY` | empty | API key for cloud provider |
 | `LLM_MAX_TOKENS` | `512` | Max response tokens |
 | `AI_REPLIES_ENABLED` | `false` | Enable AI replies after greeting |
