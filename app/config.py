@@ -57,6 +57,7 @@ class Config:
     api_port: int
     rag_chunk_size: int
     rag_top_k: int
+    weather_city: str
 
     @classmethod
     def from_env(cls) -> Config:
@@ -109,6 +110,7 @@ class Config:
         api_port = int(os.getenv("API_PORT", "8080"))
         rag_chunk_size = int(os.getenv("RAG_CHUNK_SIZE", "500"))
         rag_top_k = int(os.getenv("RAG_TOP_K", "3"))
+        weather_city = os.getenv("WEATHER_CITY", "Minsk").strip() or "Minsk"
 
         return cls(
             bot_token=bot_token,
@@ -134,4 +136,5 @@ class Config:
             api_port=api_port,
             rag_chunk_size=rag_chunk_size,
             rag_top_k=rag_top_k,
+            weather_city=weather_city,
         )

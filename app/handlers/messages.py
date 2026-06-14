@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 
 from telegram import Update
 from telegram.ext import ContextTypes
 
 from app.services.conversation_starter_service import ConversationStarterService
+from app.services.greeting_rules_service import GreetingRulesService
 from app.services.greeting_service import GreetingService
 from app.services.memory_service import MemoryService
 from app.services.profile_service import ProfileService
@@ -26,12 +28,14 @@ async def private_text_message(update: Update, context: ContextTypes.DEFAULT_TYP
         return
 
     greeting_service = context.bot_data.get("greeting_service")
+    greeting_rules_service = context.bot_data.get("greeting_rules_service")
     settings_service = context.bot_data.get("settings_service")
     starter_service = context.bot_data.get("starter_service")
     memory_service = context.bot_data.get("memory_service")
     profile_service = context.bot_data.get("profile_service")
     reply_service = context.bot_data.get("reply_service")
     greeting_text = context.bot_data.get("greeting_text", "")
+    timezone = context.bot_data.get("timezone")
 
     if not isinstance(greeting_service, GreetingService):
         logger.error("Greeting service is not configured")
@@ -63,18 +67,32 @@ async def private_text_message(update: Update, context: ContextTypes.DEFAULT_TYP
         return
 
     sent_greeting = False
-    if greeting_service.should_send_greeting(user_id):
-        text = greeting_text
-        settings = settings_service.get_user_settings(user_id)
-        if settings.use_starters and isinstance(starter_service, ConversationStarterService):
-            starter = starter_service.pick()
-            if starter:
-                text = starter
+    now = datetime.now(tz=timezone) if timezone is not None else datetime.now()
 
-        await update.effective_message.reply_text(text)
-        if isinstance(memory_service, MemoryService):
-            memory_service.record_assistant_message(user_id, text)
-        sent_greeting = True
+    if isinstance(greeting_rules_service, GreetingRulesService) and greeting_rules_service.has_rules(
+        user_id
+    ):
+        due_rules = greeting_rules_service.get_due_rules(user_id, now, require_hour=False)
+        if due_rules:
+            rule = due_rules[0]
+            await update.effective_message.reply_text(rule.text)
+            if isinstance(memory_service, MemoryService):
+                memory_service.record_assistant_message(user_id, rule.text)
+            greeting_rules_service.mark_sent(rule.id, now.date())
+            sent_greeting = True
+    else:
+        user_settings = settings_service.get_user_settings(user_id)
+        if greeting_service.should_send_greeting(user_id, user_settings, now=now):
+            text = settings_service.resolve_greeting_text(
+                user_id,
+                greeting_text,
+                starter_service if isinstance(starter_service, ConversationStarterService) else None,
+            )
+
+            await update.effective_message.reply_text(text)
+            if isinstance(memory_service, MemoryService):
+                memory_service.record_assistant_message(user_id, text)
+            sent_greeting = True
 
     if sent_greeting:
         return

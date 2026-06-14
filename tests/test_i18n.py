@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.i18n import supported_languages, translate
+from app.i18n import language_name, supported_languages, translate
 
 
 def test_translate_returns_russian_default() -> None:
@@ -17,3 +17,9 @@ def test_supported_languages_contains_ru_and_en() -> None:
     languages = supported_languages()
     assert "ru" in languages
     assert "en" in languages
+
+
+def test_language_name_maps_supported_codes() -> None:
+    assert language_name("ru") == "Russian"
+    assert language_name("en") == "English"
+    assert language_name("de") == "de"

@@ -10,6 +10,7 @@ from types import TracebackType
 
 from app.database.migrations import run_migrations
 from app.database.repositories.documents import SQLiteDocumentRepository
+from app.database.repositories.greeting_rules import SQLiteGreetingRulesRepository
 from app.database.repositories.greeting import SQLiteGreetingRepository
 from app.database.repositories.memory import SQLiteMemoryRepository
 from app.database.repositories.mood import SQLiteMoodRepository
@@ -24,6 +25,7 @@ class SQLiteDatabase:
         self.database_path = Path(database_path)
         self._connection: sqlite3.Connection | None = None
         self.greetings = SQLiteGreetingRepository(self)
+        self.greeting_rules = SQLiteGreetingRulesRepository(self)
         self.settings = SQLiteSettingsRepository(self)
         self.profiles = SQLiteProfileRepository(self)
         self.moods = SQLiteMoodRepository(self)

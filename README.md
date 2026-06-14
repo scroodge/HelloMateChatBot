@@ -142,6 +142,7 @@ chmod +x update.sh
 | `API_PORT` | `8080` | FastAPI bind port |
 | `RAG_CHUNK_SIZE` | `500` | RAG chunk size in characters |
 | `RAG_TOP_K` | `3` | Top chunks injected into prompts |
+| `WEATHER_CITY` | `Minsk` | City for live weather lookups (Open-Meteo) |
 
 ## Commands
 
@@ -161,8 +162,19 @@ chmod +x update.sh
 | `/settings` | View or set global bot settings |
 | `/setlang` | Admin: set user language |
 | `/setgreeting` | Admin: enable/disable user greetings |
+| `/greetings` | Admin: list all greeting rules for a user |
+| `/addgreeting` | Admin: add a greeting rule with its own text and schedule |
+| `/delgreeting` | Admin: delete a greeting rule by number |
+| `/togglegreeting` | Admin: enable/disable a greeting rule by number |
+| `/setgreettext` | Admin: set legacy single greeting text (when no rules exist) |
+| `/setgreetschedule` | Admin: set legacy single greeting schedule |
+| `/setstarters` | Admin: enable/disable random conversation starters |
 | `/sethour` | Admin: set user greeting hour |
+| `/setpersona` | Admin: set full AI system prompt for a user |
+| `/getpersona` | Admin: view effective AI system prompt for a user |
 | `/userinfo` | Admin: inspect user settings |
+
+Global bot setting `default_persona` (via `/settings set default_persona ...`) applies when a user has no custom persona.
 
 Normal private text messages trigger the daily greeting check on the first message of the day.
 After the greeting, AI replies are sent when `AI_REPLIES_ENABLED=true`.

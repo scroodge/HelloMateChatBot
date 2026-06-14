@@ -14,6 +14,11 @@ class UserSettings:
     greeting_enabled: bool = True
     greeting_hour: int = 9
     use_starters: bool = False
+    greeting_text: str | None = None
+    greeting_interval: str = "daily"
+    greeting_weekday: int = 0
+    greeting_day: int = 1
+    persona_prompt: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

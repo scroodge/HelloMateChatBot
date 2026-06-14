@@ -18,11 +18,20 @@ from app.api.main import create_api_app
 from app.config import Config, ConfigError
 from app.database.sqlite import SQLiteDatabase
 from app.handlers.admin import (
+    addgreeting_command,
     admin_help,
+    delgreeting_command,
+    listgreetings_command,
     setgreeting_command,
+    setgreettext_command,
+    setgreetschedule_command,
     sethour_command,
+    getpersona_command,
     setlang_command,
+    setpersona_command,
+    setstarters_command,
     settings_command,
+    togglegreeting_command,
     userinfo_command,
 )
 from app.handlers.callbacks import callback_router
@@ -42,6 +51,7 @@ from app.handlers.voice import private_voice_message
 from app.jobs.greeting_jobs import register_greeting_jobs
 from app.services.conversation_starter_service import ConversationStarterService
 from app.services.embedding_service import EmbeddingService
+from app.services.greeting_rules_service import GreetingRulesService
 from app.services.greeting_service import GreetingService
 from app.services.llm import LLMService
 from app.services.llm.factory import build_llm_provider
@@ -51,6 +61,7 @@ from app.services.profile_service import ProfileService
 from app.services.rag_service import RAGService
 from app.services.reply_service import ReplyService
 from app.services.settings_service import SettingsService
+from app.services.weather_service import WeatherService
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +79,7 @@ def build_application(config: Config, database: SQLiteDatabase):
     """Build and configure the Telegram application."""
 
     greeting_service = GreetingService(database.greetings, config.timezone)
+    greeting_rules_service = GreetingRulesService(database.greeting_rules)
     settings_service = SettingsService(
         database.settings,
         config.default_language,
@@ -91,6 +103,7 @@ def build_application(config: Config, database: SQLiteDatabase):
         chunk_size=config.rag_chunk_size,
         top_k=config.rag_top_k,
     )
+    weather_service = WeatherService(config.weather_city, config.timezone)
     reply_service = ReplyService(
         llm_service=llm_service,
         memory_service=memory_service,
@@ -98,11 +111,13 @@ def build_application(config: Config, database: SQLiteDatabase):
         profile_service=profile_service,
         settings_service=settings_service,
         rag_service=rag_service,
+        weather_service=weather_service,
         enabled=config.ai_replies_enabled,
     )
 
     application = ApplicationBuilder().token(config.bot_token).build()
     application.bot_data["greeting_service"] = greeting_service
+    application.bot_data["greeting_rules_service"] = greeting_rules_service
     application.bot_data["settings_service"] = settings_service
     application.bot_data["starter_service"] = starter_service
     application.bot_data["profile_service"] = profile_service
@@ -136,7 +151,24 @@ def build_application(config: Config, database: SQLiteDatabase):
     application.add_handler(
         CommandHandler("setgreeting", setgreeting_command, filters=private_chat)
     )
+    application.add_handler(
+        CommandHandler("setgreettext", setgreettext_command, filters=private_chat)
+    )
+    application.add_handler(
+        CommandHandler("setgreetschedule", setgreetschedule_command, filters=private_chat)
+    )
+    application.add_handler(CommandHandler("greetings", listgreetings_command, filters=private_chat))
+    application.add_handler(CommandHandler("addgreeting", addgreeting_command, filters=private_chat))
+    application.add_handler(CommandHandler("delgreeting", delgreeting_command, filters=private_chat))
+    application.add_handler(
+        CommandHandler("togglegreeting", togglegreeting_command, filters=private_chat)
+    )
+    application.add_handler(
+        CommandHandler("setstarters", setstarters_command, filters=private_chat)
+    )
     application.add_handler(CommandHandler("sethour", sethour_command, filters=private_chat))
+    application.add_handler(CommandHandler("setpersona", setpersona_command, filters=private_chat))
+    application.add_handler(CommandHandler("getpersona", getpersona_command, filters=private_chat))
     application.add_handler(CommandHandler("userinfo", userinfo_command, filters=private_chat))
     application.add_handler(CallbackQueryHandler(callback_router))
     application.add_handler(

@@ -35,7 +35,9 @@ class SQLiteSettingsRepository:
     def get_user_settings(self, user_id: int) -> UserSettings | None:
         row = self._database.connection.execute(
             """
-            SELECT user_id, language, greeting_enabled, greeting_hour, use_starters
+            SELECT user_id, language, greeting_enabled, greeting_hour, use_starters,
+                   greeting_text, greeting_interval, greeting_weekday, greeting_day,
+                   persona_prompt
             FROM user_settings
             WHERE user_id = ?
             """,
@@ -49,6 +51,11 @@ class SQLiteSettingsRepository:
             greeting_enabled=bool(row["greeting_enabled"]),
             greeting_hour=int(row["greeting_hour"]),
             use_starters=bool(row["use_starters"]),
+            greeting_text=row["greeting_text"],
+            greeting_interval=row["greeting_interval"],
+            greeting_weekday=int(row["greeting_weekday"]),
+            greeting_day=int(row["greeting_day"]),
+            persona_prompt=row["persona_prompt"],
         )
 
     def upsert_user_settings(self, settings: UserSettings) -> UserSettings:
@@ -56,14 +63,21 @@ class SQLiteSettingsRepository:
             connection.execute(
                 """
                 INSERT INTO user_settings (
-                    user_id, language, greeting_enabled, greeting_hour, use_starters, updated_at
+                    user_id, language, greeting_enabled, greeting_hour, use_starters,
+                    greeting_text, greeting_interval, greeting_weekday, greeting_day,
+                    persona_prompt, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT(user_id) DO UPDATE SET
                     language = excluded.language,
                     greeting_enabled = excluded.greeting_enabled,
                     greeting_hour = excluded.greeting_hour,
                     use_starters = excluded.use_starters,
+                    greeting_text = excluded.greeting_text,
+                    greeting_interval = excluded.greeting_interval,
+                    greeting_weekday = excluded.greeting_weekday,
+                    greeting_day = excluded.greeting_day,
+                    persona_prompt = excluded.persona_prompt,
                     updated_at = CURRENT_TIMESTAMP
                 """,
                 (
@@ -72,6 +86,11 @@ class SQLiteSettingsRepository:
                     int(settings.greeting_enabled),
                     settings.greeting_hour,
                     int(settings.use_starters),
+                    settings.greeting_text,
+                    settings.greeting_interval,
+                    settings.greeting_weekday,
+                    settings.greeting_day,
+                    settings.persona_prompt,
                 ),
             )
         return settings
@@ -79,7 +98,9 @@ class SQLiteSettingsRepository:
     def list_user_settings(self) -> list[UserSettings]:
         rows = self._database.connection.execute(
             """
-            SELECT user_id, language, greeting_enabled, greeting_hour, use_starters
+            SELECT user_id, language, greeting_enabled, greeting_hour, use_starters,
+                   greeting_text, greeting_interval, greeting_weekday, greeting_day,
+                   persona_prompt
             FROM user_settings
             ORDER BY user_id
             """
@@ -91,6 +112,11 @@ class SQLiteSettingsRepository:
                 greeting_enabled=bool(row["greeting_enabled"]),
                 greeting_hour=int(row["greeting_hour"]),
                 use_starters=bool(row["use_starters"]),
+                greeting_text=row["greeting_text"],
+                greeting_interval=row["greeting_interval"],
+                greeting_weekday=int(row["greeting_weekday"]),
+                greeting_day=int(row["greeting_day"]),
+                persona_prompt=row["persona_prompt"],
             )
             for row in rows
         ]

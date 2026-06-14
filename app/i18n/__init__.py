@@ -7,6 +7,10 @@ from pathlib import Path
 
 _LOCALES_DIR = Path(__file__).resolve().parent / "locales"
 _LOCALES: dict[str, dict[str, str]] = {}
+_LANGUAGE_NAMES = {
+    "ru": "Russian",
+    "en": "English",
+}
 
 
 def _load_locales() -> None:
@@ -21,6 +25,12 @@ def supported_languages() -> list[str]:
 
     _load_locales()
     return sorted(_LOCALES)
+
+
+def language_name(code: str) -> str:
+    """Return a human-readable language name for LLM prompts."""
+
+    return _LANGUAGE_NAMES.get(code, code)
 
 
 def translate(key: str, language: str = "ru", **kwargs: object) -> str:
