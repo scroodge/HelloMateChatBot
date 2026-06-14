@@ -465,20 +465,6 @@ if (typeof tg.expand === 'function') tg.expand();
 const initData = tg.initData || '';
 const isLocalDev = ['127.0.0.1', 'localhost'].includes(location.hostname);
 
-// Gate: outside Telegram (no initData) AND not local dev → show neutral lock screen.
-// The API is already initData+admin gated; this just hides the console UI from
-// anyone who loads the public URL in a plain browser.
-if (!initData && !isLocalDev) {
-  document.getElementById('lock-screen').style.display = 'flex';
-  document.getElementById('nav').style.display = 'none';
-  document.querySelector('main').style.display = 'none';
-} else {
-  if (!initData) {
-    document.getElementById('dev-banner').hidden = false;
-  }
-  loadContacts();
-}
-
 // ── API helpers ──────────────────────────────────────────────────────────────
 
 async function api(method, path, body) {
@@ -910,7 +896,21 @@ function escHtml(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// (Initial load is triggered by the access gate near the top of this script.)
+// ── Access gate + initial load ───────────────────────────────────────────────
+// Runs at the END of the script so loadContacts() and the const/let it touches
+// are already initialized (avoids a TDZ "uninitialized variable" error on load).
+// Outside Telegram (no initData) and not local dev → neutral lock screen.
+// The API is already initData+admin gated; this just hides the console UI.
+if (!initData && !isLocalDev) {
+  document.getElementById('lock-screen').style.display = 'flex';
+  document.getElementById('nav').style.display = 'none';
+  document.querySelector('main').style.display = 'none';
+} else {
+  if (!initData) {
+    document.getElementById('dev-banner').hidden = false;
+  }
+  loadContacts();
+}
 </script>
 </body>
 </html>
