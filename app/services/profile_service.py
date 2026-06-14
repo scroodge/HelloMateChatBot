@@ -49,6 +49,11 @@ class ProfileService:
 
         return self.repository.get_profile(user_id)
 
+    def list_profiles(self) -> list[UserProfile]:
+        """Return all stored profiles (everyone the bot has interacted with)."""
+
+        return self.repository.list_profiles()
+
     def set_display_name(self, user_id: int, display_name: str) -> UserProfile:
         """Update a user's display name."""
 

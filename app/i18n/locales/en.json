@@ -21,6 +21,8 @@
   "remember_saved": "Remembered: {text}",
   "remember_usage": "Usage: /remember <text>",
   "dashboard_button": "Open dashboard",
+  "dashboard_unavailable": "Dashboard is unavailable. Set MINI_APP_URL or MINI_APP_DEV=true.",
+  "dashboard_dev_local": "Local dev dashboard: {url}\nOpen this link in your browser (MINI_APP_DEV mode).",
   "admin_only": "This command is only available to administrators.",
   "admin_help": "Admin commands: /greetings, /addgreeting, /delgreeting, /togglegreeting, /setgreeting, /setgreettext, /setgreetschedule, /sethour, /setpersona, /getpersona, /userinfo",
   "settings_title": "Global settings:",

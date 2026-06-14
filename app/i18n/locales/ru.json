@@ -21,6 +21,8 @@
   "remember_saved": "Запомнил: {text}",
   "remember_usage": "Использование: /remember <текст>",
   "dashboard_button": "Открыть панель",
+  "dashboard_unavailable": "Панель недоступна. Укажите MINI_APP_URL или MINI_APP_DEV=true.",
+  "dashboard_dev_local": "Локальная панель: {url}\nОткройте ссылку в браузере (режим MINI_APP_DEV).",
   "admin_only": "Эта команда доступна только администраторам.",
   "admin_help": "Админ-команды: /greetings, /addgreeting, /delgreeting, /togglegreeting, /setgreeting, /setgreettext, /setgreetschedule, /sethour, /setpersona, /getpersona, /userinfo",
   "settings_title": "Глобальные настройки:",

@@ -3,6 +3,11 @@
 _Last updated: 2026-06-14 · See [PROJECT_ANALYSIS.md](PROJECT_ANALYSIS.md) for the
 overall context, product model, and DB assessment._
 
+> **Parallel delivery (June 2026):** Telegram Business transport (`business_message`,
+> managed-chat memory, `business_connection_id` replies) and reply debounce
+> (`REPLY_DEBOUNCE_SECONDS`) shipped alongside Phase 6/7 work. Documented in
+> [README.md](../README.md#telegram-business-owner-proxy-mode).
+
 **Goal of these two phases:** give the bot owner a fast, friendly way to configure
 the bot **per contact** and to **watch what it's doing** — via a Telegram Mini App
 admin console — built on a structured persona model with reusable presets.
@@ -238,3 +243,37 @@ service layer — that every later slice builds on.
 - **FKs/cascade & `/forgetme`** — deferred; events table will add the first
   indexed activity log but per-contact purge remains a later cross-cutting item.
 </content>
+
+---
+
+## Phase 9: Business suggest-reply mode
+
+**Goal:** owner gets full control over whether the bot replies automatically, suggests a draft for copy-paste, or stays silent — configurable per contact with a global default.
+
+### Modes
+| Mode | Behavior |
+|------|----------|
+| `auto` | Bot replies directly to contact (original behavior) |
+| `suggest` | Bot DMs owner: contact name + their message + AI draft + 📋 copy button |
+| `off` | Bot does nothing for incoming contact messages |
+
+**Global default:** `suggest`  
+**Resolution chain:** per-contact `business_reply_mode` (UserSettings) → bot setting `business_reply_mode` → `"suggest"`
+
+### Slices
+
+| Slice | Contents |
+|-------|----------|
+| **9A** | `UserSettings.business_reply_mode` field + schema column + Alembic migration |
+| **9B** | `SettingsService.get_business_reply_mode()` resolver + `set_business_reply_mode()` |
+| **9C** | `ReplyService.draft_reply()` — like generate but skips memory recording |
+| **9D** | `incoming.py` pipeline: `reply_mode` param + `on_suggest` callback routing |
+| **9E** | `business.py` handler: resolve mode, build owner DM with `CopyTextButton` |
+| **9F** | Admin API: expose `business_reply_mode` in GET/PUT /users/{id}/settings |
+| **9G** | Mini App UI: global selector in Settings tab, per-contact override in contact detail |
+| **9H** | Tests: mode resolution, draft_reply no-memory, business handler routing |
+
+### Memory behaviour
+- Contact's incoming message: recorded immediately (always)
+- Draft in suggest mode: NOT recorded
+- Owner's pasted reply: arrives as business message with sender=owner → existing `sender_is_owner=True` path records it as assistant turn automatically — no extra code needed

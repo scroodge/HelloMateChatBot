@@ -1,29 +1,40 @@
-"""Tests for database migrations."""
+"""Tests for database schema provisioning."""
 
 from __future__ import annotations
 
-import sqlite3
 from pathlib import Path
 
-from app.database.migrations import run_migrations
+from sqlalchemy import inspect
+
+from app.database.db import Database
 
 
-def test_run_migrations_on_empty_database(tmp_path: Path) -> None:
+def test_schema_created_on_open(tmp_path: Path) -> None:
     database_path = tmp_path / "test.db"
-    connection = sqlite3.connect(database_path)
-    connection.row_factory = sqlite3.Row
-    run_migrations(connection)
+    with Database(f"sqlite:///{database_path}") as database:
+        tables = set(inspect(database.engine).get_table_names())
 
-    tables = {
-        row["name"]
-        for row in connection.execute(
-            "SELECT name FROM sqlite_master WHERE type = 'table'"
-        ).fetchall()
+    expected = {
+        "user_greetings",
+        "user_settings",
+        "bot_settings",
+        "user_profiles",
+        "mood_entries",
+        "conversation_messages",
+        "conversation_summaries",
+        "documents",
+        "document_chunks",
+        "user_greeting_rules",
+        "business_connections",
+        "business_chats",
     }
-    connection.close()
+    assert expected <= tables
 
-    assert "schema_version" in tables
-    assert "user_greetings" in tables
-    assert "user_settings" in tables
-    assert "user_profiles" in tables
-    assert "documents" in tables
+
+def test_indexes_created(tmp_path: Path) -> None:
+    database_path = tmp_path / "test.db"
+    with Database(f"sqlite:///{database_path}") as database:
+        inspector = inspect(database.engine)
+        message_indexes = {idx["name"] for idx in inspector.get_indexes("conversation_messages")}
+
+    assert "idx_conversation_messages_user_created" in message_indexes

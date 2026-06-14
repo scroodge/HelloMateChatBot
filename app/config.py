@@ -39,6 +39,7 @@ class Config:
     timezone_name: str
     greeting_text: str
     database_path: Path
+    database_url: str
     log_level: str
     admin_user_ids: set[int]
     default_language: str
@@ -53,11 +54,16 @@ class Config:
     llm_max_tokens: int
     ai_replies_enabled: bool
     mini_app_url: str
+    mini_app_dev: bool
     api_host: str
     api_port: int
     rag_chunk_size: int
     rag_top_k: int
     weather_city: str
+    owner_name: str
+    bot_name: str
+    business_mode_enabled: bool
+    reply_debounce_seconds: float
 
     @classmethod
     def from_env(cls) -> Config:
@@ -79,6 +85,7 @@ class Config:
 
         greeting_text = os.getenv("GREETING_TEXT", "Привет друг! Как ты)")
         database_path = Path(os.getenv("DATABASE_PATH", "/app/data/hellomate.db")).expanduser()
+        database_url = os.getenv("DATABASE_URL", "").strip() or f"sqlite:///{database_path}"
         log_level = os.getenv("LOG_LEVEL", "INFO").upper()
 
         admin_raw = os.getenv("ADMIN_USER_IDS", "")
@@ -106,11 +113,20 @@ class Config:
         ai_replies_enabled = _parse_bool(os.getenv("AI_REPLIES_ENABLED", "false"))
 
         mini_app_url = os.getenv("MINI_APP_URL", "").strip()
+        mini_app_dev = _parse_bool(os.getenv("MINI_APP_DEV", "false"))
         api_host = os.getenv("API_HOST", "0.0.0.0").strip() or "0.0.0.0"
         api_port = int(os.getenv("API_PORT", "8080"))
         rag_chunk_size = int(os.getenv("RAG_CHUNK_SIZE", "500"))
         rag_top_k = int(os.getenv("RAG_TOP_K", "3"))
         weather_city = os.getenv("WEATHER_CITY", "Minsk").strip() or "Minsk"
+        owner_name = os.getenv("OWNER_NAME", "Owner").strip() or "Owner"
+        bot_name = os.getenv("BOT_NAME", "HelloMate").strip() or "HelloMate"
+        business_mode_enabled = _parse_bool(
+            os.getenv("BUSINESS_MODE_ENABLED", "true"), default=True
+        )
+        reply_debounce_seconds = float(os.getenv("REPLY_DEBOUNCE_SECONDS", "5"))
+        if reply_debounce_seconds < 0:
+            raise ConfigError("REPLY_DEBOUNCE_SECONDS must be >= 0.")
 
         return cls(
             bot_token=bot_token,
@@ -118,6 +134,7 @@ class Config:
             timezone_name=timezone_name,
             greeting_text=greeting_text,
             database_path=database_path,
+            database_url=database_url,
             log_level=log_level,
             admin_user_ids=admin_user_ids,
             default_language=default_language,
@@ -132,9 +149,14 @@ class Config:
             llm_max_tokens=llm_max_tokens,
             ai_replies_enabled=ai_replies_enabled,
             mini_app_url=mini_app_url,
+            mini_app_dev=mini_app_dev,
             api_host=api_host,
             api_port=api_port,
             rag_chunk_size=rag_chunk_size,
             rag_top_k=rag_top_k,
             weather_city=weather_city,
+            owner_name=owner_name,
+            bot_name=bot_name,
+            business_mode_enabled=business_mode_enabled,
+            reply_debounce_seconds=reply_debounce_seconds,
         )

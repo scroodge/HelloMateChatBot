@@ -19,6 +19,13 @@ class UserSettings:
     greeting_weekday: int = 0
     greeting_day: int = 1
     persona_prompt: str | None = None
+    # structured persona fields (slice 6A)
+    persona_preset: str | None = None  # e.g. "friend", "family", "mentor"
+    persona_relationship: str | None = None  # free-text e.g. "older brother"
+    persona_tone: str | None = None  # e.g. "warm", "formal", "playful"
+    persona_topics: str | None = None  # JSON list of allowed topics
+    persona_boundaries: str | None = None  # JSON list of forbidden topics
+    business_reply_mode: str | None = None  # "auto" | "suggest" | "off" | None=inherit global
 
 
 @dataclass(frozen=True, slots=True)

@@ -1,6 +1,6 @@
 # HelloMate — Project Analysis & Roadmap
 
-_Last updated: 2026-06-14_
+_Last updated: 2026-06-14 (Telegram Business + reply debounce documented)_
 
 HelloMate ([@HelloMateChatBot](https://t.me/HelloMateChatBot)) is an open-source
 Telegram companion bot.
@@ -39,13 +39,18 @@ Telegram Mini App ─► api/ (FastAPI) ─► services/ ─► SQLite
 | --- | --- | --- |
 | Entrypoint | [app/main.py](../app/main.py) | Wires config → DB → services → handlers, registers jobs, optionally starts the FastAPI thread |
 | Config | [app/config.py](../app/config.py) | Frozen dataclass loaded from env (`.env`) |
-| Handlers | [app/handlers/](../app/handlers/) | `commands`, `admin`, `messages`, `mood`, `voice`, `callbacks`, `helpers` |
-| Services | [app/services/](../app/services/) | Greeting, settings, profile, mood, memory, reply, RAG, embedding, weather, conversation starters, LLM providers |
+| Handlers | [app/handlers/](../app/handlers/) | `commands`, `admin`, `messages`, `incoming`, `business`, `mood`, `voice`, `callbacks`, `helpers` |
+| Services | [app/services/](../app/services/) | Greeting, settings, profile, mood, memory, reply, reply debounce, business connections, RAG, embedding, weather, persona presets, conversation starters, LLM providers |
 | Repositories | [app/database/repositories/](../app/database/repositories/) | One module per table; raw SQL over SQLite |
 | Migrations | [app/database/migrations/](../app/database/migrations/) | Versioned `.sql` files applied by [migrations.py](../app/database/migrations.py) |
 | API / Mini App | [app/api/](../app/api/), [app/web/index.html](../app/web/index.html) | FastAPI read endpoints + a single static HTML dashboard |
 | i18n | [app/i18n/](../app/i18n/) | `ru` / `en` JSON locales |
-| Tests | [tests/](../tests/) | 51 tests, all passing (`pytest -q`) |
+| Tests | [tests/](../tests/) | Pytest suite (incl. business, debounce, persona, admin API) |
+
+**Transport (June 2026):** production use is **Telegram Business** — the owner connects
+the bot to their account; updates arrive as `business_message` / `business_connection`
+([handlers/business.py](../app/handlers/business.py)). Direct private chat with the bot
+remains for admin commands and testing.
 
 **Tech stack:** Python 3.12, async `python-telegram-bot`, FastAPI + uvicorn,
 SQLite (WAL), httpx, Ruff/Black, Pytest. Deploys via Docker Compose with an
@@ -68,13 +73,30 @@ Migrations `001`–`009` define:
   and embedded.
 - `user_greeting_rules` (migration `008`) — **multiple** scheduled greetings per
   user, each with its own text + schedule (supersedes the single legacy greeting).
+- `business_connections` + `business_chats` — Telegram Business `connection_id`,
+  owner user id, and managed private chat → contact mapping (Alembic + schema).
+- Structured persona columns on `user_settings` — `persona_preset`, `persona_relationship`,
+  `persona_tone`, `persona_topics`, `persona_boundaries` (admin API / `PersonaService`).
+- `events` — usage tracking for admin stats.
 
 ### 1.1 Database assessment
 
-**Verdict: SQLite is the right choice and the schema is sound** for a single-owner
-bot with dozens–hundreds of contacts and low write volume. WAL mode, versioned
-migrations with a `schema_version` table, and repository-per-table separation are
-all in place. No need for Postgres unless this becomes multi-owner/high-concurrency.
+> **Update (slice 0 done):** the data layer was migrated to **SQLAlchemy Core with
+> a dual backend** — SQLite for local/CI, **PostgreSQL in production** — selected by
+> `DATABASE_URL`. Schema lives in [app/database/schema.py](../app/database/schema.py),
+> the engine/manager in [app/database/db.py](../app/database/db.py), and repositories
+> use backend-agnostic Core expressions (dialect-aware upserts in
+> [util.py](../app/database/util.py)). The old `.sql` migration runner was removed;
+> the SQLAlchemy schema is now the source of truth (Alembic to be added before the
+> first incremental schema change in Phase 6). Repository integration tests
+> ([tests/test_repositories.py](../tests/test_repositories.py)) pass on **both SQLite
+> and a real Postgres 16** (set `HELLOMATE_TEST_DATABASE_URL` to run them on Postgres).
+> This supports the chosen topology: bot on a public host, Postgres on a private
+> server (reachable over the WireGuard VPN), so data is never stored on the public host.
+
+**Original verdict (still valid for SQLite mode):** SQLite is sound for a single-owner
+bot with dozens–hundreds of contacts and low write volume. Postgres is now used in
+production for the data-locality/durability reasons above, not for scale.
 
 **Fixed in this pass:**
 - **Cross-thread connections (was a real bug).** A single `sqlite3` connection was
@@ -127,13 +149,34 @@ all in place. No need for Postgres unless this becomes multi-owner/high-concurre
   system persona + recent memory + latest mood + conversation summary + RAG notes
   + live weather (when the message looks weather-related).
 - CJK-leak guard: if the model emits Chinese characters it is asked to rewrite.
-- Voice messages: transcription hook + reply ([voice.py](../app/handlers/voice.py)).
+- Voice messages: transcription hook + reply ([voice.py](../app/handlers/voice.py),
+  [business.py](../app/handlers/business.py) for managed chats).
+
+### Telegram Business (owner proxy) ✅
+- `business_connection` handler persists owner ↔ bot linkage
+  ([business_service.py](../app/services/business_service.py)).
+- `business_message` handler routes managed-chat text through the shared pipeline
+  ([incoming.py](../app/handlers/incoming.py)).
+- Replies sent via `business_connection_id` (PTB `Message.reply_text` / `sendMessage`).
+- Per-contact memory in managed chats: contact messages → `user` role; owner messages →
+  `assistant` role; owner messages do not trigger auto-reply.
+- Scheduled proactive greetings use `business_connection_id` when the contact chat is known
+  ([greeting_jobs.py](../app/jobs/greeting_jobs.py)).
+
+### Reply debounce ✅
+- [reply_debounce_service.py](../app/services/reply_debounce_service.py) buffers rapid
+  contact messages for `REPLY_DEBOUNCE_SECONDS` (default 5), then one reply to the combined
+  text. Owner messages flush the buffer immediately. Set `0` to disable.
 
 ### Personalization (the heart of the vision — partially built)
 - **Per-user persona** (`persona_prompt`) that fully replaces the system prompt,
   with a resolution chain: **user persona → global `default_persona` → built-in
   inner-voice prompt** (`resolve_persona_prompt` in
-  [settings_service.py](../app/services/settings_service.py)).
+  [settings_service.py](../app/services/settings_service.py); structured presets via
+  [persona_service.py](../app/services/persona_service.py) in admin API — **live replies
+  still use `settings_service` chain unless `persona_prompt` is set**).
+- Preset library in [data/personas.json](../data/personas.json) (ru/en templates).
+- Owner identity env vars: `OWNER_NAME`, `BOT_NAME`.
 - Built-in persona is an "informal personal inner voice" (Russian «ты», first
   person, never "I'm a bot").
 - Per-user language (`ru`/`en`), greeting prefs, and timezone.
@@ -147,10 +190,13 @@ all in place. No need for Postgres unless this becomes multi-owner/high-concurre
 
 ### Mini App & API
 - FastAPI backend with **validated Telegram `initData`** auth
-  ([api/auth.py](../app/api/auth.py)) — read endpoints `/profile`, `/mood`,
-  `/memory`, `/health`.
-- Static dashboard ([app/web/index.html](../app/web/index.html)) that renders
-  profile, mood, and recent messages.
+  ([api/auth.py](../app/api/auth.py)).
+- User read endpoints: `/profile`, `/mood`, `/memory`, `/health`
+  ([api/routes.py](../app/api/routes.py)).
+- **Admin console API** (Phase 7): contacts roster, per-user persona/settings write,
+  prompt playground, presets — [api/admin_routes.py](../app/api/admin_routes.py).
+- Static admin HTML ([app/web/index.html](../app/web/index.html)): contacts list,
+  persona editor (preset + raw prompt), playground, global settings.
 
 ### Ops
 - Versioned migrations, Docker/Compose, optional Ollama profile, `update.sh`,
@@ -161,49 +207,32 @@ all in place. No need for Postgres unless this becomes multi-owner/high-concurre
 ## 3. The gap: current state vs. the goal ⚠️
 
 Admin-only configuration is **correct and matches the product model** — the owner
-sets up the bot for each of his contacts. The engine is in good shape: per-contact
-persona, per-contact settings, the resolution chain, memory, and RAG all exist.
-The gaps are about **the owner's setup ergonomics** and a few missing capabilities,
-**not** about giving end users control.
+sets up the bot for each of his contacts. **Telegram Business transport and reply
+debounce are implemented** (June 2026). The engine is in good shape: per-contact
+persona, per-contact settings, memory, RAG, and an admin API/console exist.
+Remaining gaps are mostly polish and wiring:
 
-1. **Setup requires raw user IDs and command syntax.** Every config command
-   (`/setpersona`, `/setgreeting`, `/setlang`, `/sethour`, `/addgreeting`, …) is
-   admin-gated (correct) but takes a target `user_id` and exact arguments
-   ([app/handlers/admin.py](../app/handlers/admin.py)). The owner must already
-   know each contact's numeric ID and remember the syntax. This is the main
-   friction the Mini App should remove.
+1. **Structured persona presets not wired into live replies.** `PersonaService` resolves
+   presets for the admin UI and playground, but `ReplyService` still calls
+   `SettingsService.resolve_persona_prompt` (custom text → global → builtin). Owners
+   should use `/setpersona` or raw prompt in the console until this is unified.
 
-2. **No way to browse the owner's contacts.** Nothing lists "who has talked to
-   the bot" so the owner can pick a person and configure them. The data exists
-   (`profiles`, `user_settings`) but there is no admin-facing roster
-   (command or API) — so step one of setup (find the user) is manual.
+2. **Setup still benefits from better contact discovery.** The admin roster exists
+   (`GET /api/admin/users`), but contacts only appear after they message in a managed
+   chat (or direct bot chat). No import from the owner's Telegram contact list.
 
-3. **The Mini App is a read-only dashboard scoped to the caller, not an admin
-   console.** The API exposes only `GET` endpoints that return *the requesting
-   user's own* data ([api/routes.py](../app/api/routes.py)); the HTML just
-   displays it. The stated goal — *"a Mini App to set up the bot"* — needs an
-   **admin-only** Mini App that lists contacts and writes their persona/settings.
-
-4. **No persona presets / relationship templates.** Persona is a single free-text
-   prompt. There is no "Family member / Friend / Mentor / Assistant" template
-   library the owner can pick and tweak per contact, so each persona is written
-   from scratch.
-
-5. **Persona is text-only.** No structured personality (assistant name, the
-   contact's relationship to the owner, tone, topics, boundaries) that could
-   drive both the prompt and a friendly form UI.
-
-6. **Memory summary is never generated.** `conversation_summaries` can be written
+3. **Memory summary is never generated.** `conversation_summaries` can be written
    but nothing populates it, so per-contact long-term context silently caps at the
-   20-message window.
+   `MEMORY_WINDOW_SIZE` message window.
 
-7. **The bot does not reliably speak "in the owner's name."** The built-in persona
-   is a generic "personal inner voice"; there is no first-class notion of *the
-   owner's identity* (name/signature/voice) that every persona inherits so replies
-   consistently read as coming from the owner's assistant.
+4. **Scheduled greeting job queue optional.** Proactive greetings require
+   `python-telegram-bot[job-queue]`; without it, only on-message greetings fire.
 
-These are the difference between "a CLI-configured companion bot" (today) and "an
-owner-operated personal-assistant product with a clean admin console" (the goal).
+5. **Observability / stats UI incomplete.** Events are stored; the admin console
+   could show richer per-contact activity and LLM latency/cost.
+
+These are the difference between "working owner-proxy bot" (today) and a fully
+polished owner-operated personal-assistant product (the goal).
 
 ---
 

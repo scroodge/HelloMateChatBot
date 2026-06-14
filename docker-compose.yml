@@ -9,6 +9,22 @@ services:
       - "8080:8080"
     restart: unless-stopped
 
+  # Optional local PostgreSQL. Enable with: docker compose --profile postgres up -d
+  # Then set in .env: DATABASE_URL=postgresql+psycopg://hellomate:hellomate@postgres:5432/hellomate
+  # In the recommended topology the DB lives on a separate private server, so leave
+  # this profile disabled on the public bot host and point DATABASE_URL at the remote.
+  postgres:
+    profiles: ["postgres"]
+    image: postgres:16
+    container_name: hellomate-postgres
+    environment:
+      POSTGRES_DB: hellomate
+      POSTGRES_USER: hellomate
+      POSTGRES_PASSWORD: hellomate
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
   ollama:
     profiles: ["ai"]
     image: ollama/ollama:latest
@@ -21,3 +37,4 @@ services:
 
 volumes:
   ollama_data:
+  postgres_data:

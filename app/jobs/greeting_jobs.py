@@ -7,6 +7,7 @@ from datetime import datetime
 
 from telegram.ext import ContextTypes
 
+from app.services.business_service import BusinessService
 from app.services.conversation_starter_service import ConversationStarterService
 from app.services.greeting_rules_service import GreetingRulesService
 from app.services.greeting_service import GreetingService
@@ -21,7 +22,18 @@ async def _send_greeting(
     text: str,
     now: datetime,
 ) -> None:
-    await context.bot.send_message(chat_id=user_id, text=text)
+    business_service = context.bot_data.get("business_service")
+    business_connection_id: str | None = None
+    if isinstance(business_service, BusinessService):
+        chat = business_service.get_chat_for_contact(user_id)
+        if chat is not None:
+            business_connection_id = chat.connection_id
+
+    await context.bot.send_message(
+        chat_id=user_id,
+        text=text,
+        business_connection_id=business_connection_id,
+    )
     memory_service = context.bot_data.get("memory_service")
     if memory_service is not None:
         memory_service.record_assistant_message(user_id, text, now=now)

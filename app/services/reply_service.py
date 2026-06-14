@@ -97,6 +97,59 @@ class ReplyService:
             logger.exception("Failed to generate AI reply for user %s", user_id)
             return translate("ai_unavailable", language)
 
+    async def draft_reply(self, user_id: int, user_message: str) -> str | None:
+        """Generate a reply draft without recording it to memory.
+
+        Used in suggest mode — the owner receives the draft via DM and pastes it
+        manually; the pasted message arrives as an owner-side business message and
+        gets recorded through the normal sender_is_owner path.
+        """
+
+        if not self.enabled:
+            return None
+
+        language = self.settings_service.get_language(user_id)
+        try:
+            messages = await self._build_messages(user_id, user_message, language)
+            reply = await self.llm_service.complete(messages)
+            if _contains_cjk(reply):
+                reply = await self._rewrite_without_cjk(messages, reply, language)
+            return reply
+        except Exception:
+            logger.exception("Failed to draft reply for user %s", user_id)
+            return None
+
+    async def preview_reply(
+        self,
+        user_id: int,
+        user_message: str,
+        *,
+        system_prompt_override: str | None = None,
+    ) -> dict[str, object]:
+        """Dry-run reply — returns the assembled messages and reply without recording.
+
+        Used by the admin prompt playground so the owner can tune personas without
+        polluting the live conversation memory.
+        """
+        import time
+
+        language = self.settings_service.get_language(user_id)
+        messages = await self._build_messages(user_id, user_message, language)
+        if system_prompt_override is not None:
+            messages[0] = {"role": "system", "content": system_prompt_override}
+        t0 = time.monotonic()
+        try:
+            reply = await self.llm_service.complete(messages)
+        except Exception:
+            logger.exception("Preview reply failed for user %s", user_id)
+            reply = translate("ai_unavailable", language)
+        latency_ms = round((time.monotonic() - t0) * 1000)
+        return {
+            "reply": reply,
+            "assembled_messages": messages,
+            "latency_ms": latency_ms,
+        }
+
     async def _build_messages(
         self,
         user_id: int,

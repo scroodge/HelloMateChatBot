@@ -178,24 +178,33 @@ async def dashboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
 
     mini_app_url = context.bot_data.get("mini_app_url", "")
+    mini_app_dev = context.bot_data.get("mini_app_dev", False)
+    api_port = context.bot_data.get("api_port", 8080)
     language = get_language(update, context)
-    if not mini_app_url:
-        await update.effective_message.reply_text(translate("ai_unavailable", language))
+    if not mini_app_url and not mini_app_dev:
+        await update.effective_message.reply_text(translate("dashboard_unavailable", language))
         return
 
-    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    if mini_app_url:
+        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-    keyboard = InlineKeyboardMarkup(
-        [
+        keyboard = InlineKeyboardMarkup(
             [
-                InlineKeyboardButton(
-                    translate("dashboard_button", language),
-                    web_app=WebAppInfo(url=mini_app_url),
-                )
+                [
+                    InlineKeyboardButton(
+                        translate("dashboard_button", language),
+                        web_app=WebAppInfo(url=mini_app_url),
+                    )
+                ]
             ]
-        ]
-    )
+        )
+        await update.effective_message.reply_text(
+            translate("dashboard_button", language),
+            reply_markup=keyboard,
+        )
+        return
+
+    local_url = f"http://127.0.0.1:{api_port}/"
     await update.effective_message.reply_text(
-        translate("dashboard_button", language),
-        reply_markup=keyboard,
+        translate("dashboard_dev_local", language, url=local_url),
     )

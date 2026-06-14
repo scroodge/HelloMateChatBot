@@ -16,6 +16,9 @@ if TYPE_CHECKING:
 
 PERSONA_PROMPT_MAX_LENGTH = 4000
 DEFAULT_PERSONA_BOT_SETTING = "default_persona"
+BUSINESS_REPLY_MODE_SETTING = "business_reply_mode"
+VALID_BUSINESS_REPLY_MODES = {"auto", "suggest", "off"}
+DEFAULT_BUSINESS_REPLY_MODE = "suggest"
 
 
 class SettingsService:
@@ -208,3 +211,23 @@ class SettingsService:
 
         global_enabled = self.get_bot_setting("greetings_enabled", "on").lower() != "off"
         return global_enabled and self.get_user_settings(user_id).greeting_enabled
+
+    def get_business_reply_mode(self, user_id: int) -> str:
+        """Return effective business reply mode: per-contact → global → default."""
+
+        per_contact = self.get_user_settings(user_id).business_reply_mode
+        if per_contact and per_contact in VALID_BUSINESS_REPLY_MODES:
+            return per_contact
+        global_mode = self.get_bot_setting(BUSINESS_REPLY_MODE_SETTING, "").strip()
+        if global_mode in VALID_BUSINESS_REPLY_MODES:
+            return global_mode
+        return DEFAULT_BUSINESS_REPLY_MODE
+
+    def set_business_reply_mode(self, user_id: int, mode: str | None) -> UserSettings:
+        """Set or clear per-contact business reply mode."""
+
+        if mode is not None and mode not in VALID_BUSINESS_REPLY_MODES:
+            raise ValueError(f"business_reply_mode must be one of {VALID_BUSINESS_REPLY_MODES}")
+        return self.save_user_settings(
+            replace(self._with_current(user_id), business_reply_mode=mode)
+        )

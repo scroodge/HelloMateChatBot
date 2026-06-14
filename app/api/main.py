@@ -8,19 +8,25 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from app.api.admin_routes import create_admin_router
 from app.api.routes import create_router
 from app.config import Config
-from app.database.sqlite import SQLiteDatabase
+from app.database.db import Database
+from app.services.greeting_rules_service import GreetingRulesService
+from app.services.greeting_service import GreetingService
 from app.services.memory_service import MemoryService
 from app.services.mood_service import MoodService
+from app.services.persona_service import PersonaService
 from app.services.profile_service import ProfileService
+from app.services.reply_service import ReplyService
 from app.services.settings_service import SettingsService
+from app.services.weather_service import WeatherService
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 
 
-def create_api_app(config: Config, database: SQLiteDatabase) -> FastAPI:
-    """Create the FastAPI app bound to the shared SQLite database."""
+def create_api_app(config: Config, database: Database) -> FastAPI:
+    """Create the FastAPI app bound to the shared database."""
 
     profile_service = ProfileService(database.profiles, config.timezone_name)
     mood_service = MoodService(database.moods)
@@ -30,8 +36,47 @@ def create_api_app(config: Config, database: SQLiteDatabase) -> FastAPI:
         config.default_language,
         config.greeting_hour,
     )
+    persona_service = PersonaService(
+        settings_service=settings_service,
+        owner_name=config.owner_name,
+        bot_name=config.bot_name,
+    )
+    greeting_service = GreetingService(database.greetings, config.timezone)
+    greeting_rules_service = GreetingRulesService(database.greeting_rules)
+    weather_service = WeatherService(config.weather_city, config.timezone)
 
-    app = FastAPI(title="HelloMate API")
+    from app.services.embedding_service import EmbeddingService
+    from app.services.llm import LLMService
+    from app.services.llm.factory import build_llm_provider
+    from app.services.rag_service import RAGService
+
+    llm_provider = build_llm_provider(config)
+    llm_service = LLMService(llm_provider)
+    embedding_service = EmbeddingService(
+        base_url=config.llm_base_url,
+        model=config.llm_embedding_model,
+        api_key=config.llm_api_key,
+        provider=config.llm_provider,
+    )
+    rag_service = RAGService(
+        database.documents,
+        embedding_service,
+        chunk_size=config.rag_chunk_size,
+        top_k=config.rag_top_k,
+    )
+    reply_service = ReplyService(
+        llm_service=llm_service,
+        memory_service=memory_service,
+        mood_service=mood_service,
+        profile_service=profile_service,
+        settings_service=settings_service,
+        rag_service=rag_service,
+        weather_service=weather_service,
+        enabled=config.ai_replies_enabled,
+    )
+
+    dev_user_id = next(iter(config.admin_user_ids), None) if config.mini_app_dev else None
+    app = FastAPI(title="HelloMate Admin API")
     app.include_router(
         create_router(
             config.bot_token,
@@ -39,6 +84,26 @@ def create_api_app(config: Config, database: SQLiteDatabase) -> FastAPI:
             mood_service,
             memory_service,
             settings_service,
+            mini_app_dev=config.mini_app_dev,
+            dev_user_id=dev_user_id,
+        ),
+        prefix="/api",
+    )
+    app.include_router(
+        create_admin_router(
+            bot_token=config.bot_token,
+            admin_user_ids=config.admin_user_ids,
+            profile_service=profile_service,
+            mood_service=mood_service,
+            memory_service=memory_service,
+            settings_service=settings_service,
+            persona_service=persona_service,
+            reply_service=reply_service,
+            greeting_service=greeting_service,
+            greeting_rules_service=greeting_rules_service,
+            event_repository=database.events,
+            mini_app_dev=config.mini_app_dev,
+            dev_user_id=dev_user_id,
         ),
         prefix="/api",
     )

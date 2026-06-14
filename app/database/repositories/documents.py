@@ -5,10 +5,13 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING, Protocol
 
+from sqlalchemy import insert, select
+
+from app.database.schema import document_chunks, documents
 from app.models.documents import Document, DocumentChunk
 
 if TYPE_CHECKING:
-    from app.database.sqlite import SQLiteDatabase
+    from app.database.db import Database
 
 
 class DocumentRepository(Protocol):
@@ -23,27 +26,23 @@ class DocumentRepository(Protocol):
     def list_chunks(self, user_id: int) -> list[DocumentChunk]: ...
 
 
-class SQLiteDocumentRepository:
-    """SQLite implementation of DocumentRepository."""
+class DocumentRepositoryImpl:
+    """SQLAlchemy implementation of DocumentRepository."""
 
-    def __init__(self, database: SQLiteDatabase) -> None:
-        self._database = database
+    def __init__(self, database: Database) -> None:
+        self._db = database
 
     def add_document(self, document: Document) -> Document:
-        with self._database.transaction() as connection:
-            cursor = connection.execute(
-                """
-                INSERT INTO documents (user_id, title, content, created_at)
-                VALUES (?, ?, ?, ?)
-                """,
-                (
-                    document.user_id,
-                    document.title,
-                    document.content,
-                    document.created_at.isoformat(),
-                ),
+        with self._db.engine.begin() as connection:
+            result = connection.execute(
+                insert(documents).values(
+                    user_id=document.user_id,
+                    title=document.title,
+                    content=document.content,
+                    created_at=document.created_at.isoformat(),
+                )
             )
-            document_id = int(cursor.lastrowid)
+            document_id = int(result.inserted_primary_key[0])
         return Document(
             id=document_id,
             user_id=document.user_id,
@@ -53,41 +52,34 @@ class SQLiteDocumentRepository:
         )
 
     def list_documents(self, user_id: int) -> list[Document]:
-        rows = self._database.connection.execute(
-            """
-            SELECT id, user_id, title, content, created_at
-            FROM documents
-            WHERE user_id = ?
-            ORDER BY created_at DESC
-            """,
-            (user_id,),
-        ).fetchall()
+        with self._db.engine.connect() as connection:
+            rows = connection.execute(
+                select(documents)
+                .where(documents.c.user_id == user_id)
+                .order_by(documents.c.created_at.desc())
+            ).all()
         return [
             Document(
-                id=int(row["id"]),
-                user_id=int(row["user_id"]),
-                title=row["title"],
-                content=row["content"],
-                created_at=datetime.fromisoformat(row["created_at"]),
+                id=int(row.id),
+                user_id=int(row.user_id),
+                title=row.title,
+                content=row.content,
+                created_at=datetime.fromisoformat(row.created_at),
             )
             for row in rows
         ]
 
     def add_chunk(self, chunk: DocumentChunk) -> DocumentChunk:
-        with self._database.transaction() as connection:
-            cursor = connection.execute(
-                """
-                INSERT INTO document_chunks (document_id, chunk_index, content, embedding)
-                VALUES (?, ?, ?, ?)
-                """,
-                (
-                    chunk.document_id,
-                    chunk.chunk_index,
-                    chunk.content,
-                    chunk.embedding,
-                ),
+        with self._db.engine.begin() as connection:
+            result = connection.execute(
+                insert(document_chunks).values(
+                    document_id=chunk.document_id,
+                    chunk_index=chunk.chunk_index,
+                    content=chunk.content,
+                    embedding=chunk.embedding,
+                )
             )
-            chunk_id = int(cursor.lastrowid)
+            chunk_id = int(result.inserted_primary_key[0])
         return DocumentChunk(
             id=chunk_id,
             document_id=chunk.document_id,
@@ -97,23 +89,22 @@ class SQLiteDocumentRepository:
         )
 
     def list_chunks(self, user_id: int) -> list[DocumentChunk]:
-        rows = self._database.connection.execute(
-            """
-            SELECT c.id, c.document_id, c.chunk_index, c.content, c.embedding
-            FROM document_chunks c
-            JOIN documents d ON d.id = c.document_id
-            WHERE d.user_id = ?
-            ORDER BY c.id
-            """,
-            (user_id,),
-        ).fetchall()
+        with self._db.engine.connect() as connection:
+            rows = connection.execute(
+                select(document_chunks)
+                .select_from(
+                    document_chunks.join(documents, documents.c.id == document_chunks.c.document_id)
+                )
+                .where(documents.c.user_id == user_id)
+                .order_by(document_chunks.c.id)
+            ).all()
         return [
             DocumentChunk(
-                id=int(row["id"]),
-                document_id=int(row["document_id"]),
-                chunk_index=int(row["chunk_index"]),
-                content=row["content"],
-                embedding=row["embedding"],
+                id=int(row.id),
+                document_id=int(row.document_id),
+                chunk_index=int(row.chunk_index),
+                content=row.content,
+                embedding=row.embedding,
             )
             for row in rows
         ]

@@ -17,6 +17,9 @@ def create_router(
     mood_service: MoodService,
     memory_service: MemoryService,
     settings_service: SettingsService,
+    *,
+    mini_app_dev: bool = False,
+    dev_user_id: int | None = None,
 ) -> APIRouter:
     """Build API routes with injected services."""
 
@@ -24,9 +27,11 @@ def create_router(
 
     def _user_id_from_header(x_telegram_init_data: str | None) -> int:
         parsed = validate_init_data(x_telegram_init_data or "", bot_token)
-        if parsed is None or "user_id" not in parsed:
-            raise HTTPException(status_code=401, detail="Invalid Telegram init data")
-        return int(parsed["user_id"])
+        if parsed is not None and "user_id" in parsed:
+            return int(parsed["user_id"])
+        if mini_app_dev and dev_user_id is not None:
+            return dev_user_id
+        raise HTTPException(status_code=401, detail="Invalid Telegram init data")
 
     @router.get("/health")
     async def health() -> dict[str, str]:
