@@ -69,6 +69,42 @@ Migrations `001`–`009` define:
 - `user_greeting_rules` (migration `008`) — **multiple** scheduled greetings per
   user, each with its own text + schedule (supersedes the single legacy greeting).
 
+### 1.1 Database assessment
+
+**Verdict: SQLite is the right choice and the schema is sound** for a single-owner
+bot with dozens–hundreds of contacts and low write volume. WAL mode, versioned
+migrations with a `schema_version` table, and repository-per-table separation are
+all in place. No need for Postgres unless this becomes multi-owner/high-concurrency.
+
+**Fixed in this pass:**
+- **Cross-thread connections (was a real bug).** A single `sqlite3` connection was
+  created in the main thread while the FastAPI Mini App runs in a separate thread
+  ([main.py:185](../app/main.py:185)); any API DB call would have raised
+  `ProgrammingError` (`check_same_thread`). [sqlite.py](../app/database/sqlite.py)
+  now uses **thread-local connections** (each thread gets its own), with
+  `busy_timeout=5000` to absorb brief write contention. This unblocks the admin
+  console / Mini App.
+- **Missing indexes.** Migration `010` adds indexes for the per-user, time-ordered
+  queries used by the memory window, mood history, RAG, and the planned stats
+  screens: `conversation_messages(user_id, created_at)`,
+  `mood_entries(user_id, recorded_at)`, `documents(user_id)`,
+  `document_chunks(document_id)`.
+
+**Still open (do with Phase 7):**
+- **No usage/events table.** Real monitoring stats (message/reply/error counts,
+  token/cost estimates) need their own table — nothing to aggregate today beyond
+  raw messages.
+- **No foreign keys / cascade.** `foreign_keys=ON` is set but no table declares
+  FKs, so a per-contact "delete everything" (privacy/`/forgetme`) means manual
+  deletes across tables. SQLite can't add FKs to existing tables without a rebuild;
+  add them when introducing new tables / a cleanup routine.
+- **Timestamp format drift.** Some columns default to `CURRENT_TIMESTAMP`
+  (`YYYY-MM-DD HH:MM:SS`), others store app-written ISO strings; standardize before
+  stats parse them.
+- **RAG search is brute-force cosine in Python** over BLOB embeddings — fine at
+  personal scale; revisit (sqlite-vec/FAISS) only if a contact accrues thousands
+  of chunks.
+
 ---
 
 ## 2. What is already done ✅
