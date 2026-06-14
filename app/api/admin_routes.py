@@ -233,33 +233,36 @@ def create_admin_router(
         - structured fields (preset/relationship/tone/topics/boundaries) build a prompt
         - clear_structured removes all structured fields
         """
-        if request.clear_raw:
-            persona_service.set_raw_prompt(user_id, None)
+        try:
+            if request.clear_raw:
+                persona_service.set_raw_prompt(user_id, None)
 
-        if request.clear_structured:
-            persona_service.clear_structured(user_id)
+            if request.clear_structured:
+                persona_service.clear_structured(user_id)
 
-        if request.raw_prompt is not None:
-            persona_service.set_raw_prompt(user_id, request.raw_prompt)
+            if request.raw_prompt is not None:
+                persona_service.set_raw_prompt(user_id, request.raw_prompt)
 
-        if any(
-            v is not None
-            for v in [
-                request.preset,
-                request.relationship,
-                request.tone,
-                request.topics,
-                request.boundaries,
-            ]
-        ):
-            persona_service.set_structured(
-                user_id,
-                preset=request.preset,
-                relationship=request.relationship,
-                tone=request.tone,
-                topics=request.topics,
-                boundaries=request.boundaries,
-            )
+            if any(
+                v is not None
+                for v in [
+                    request.preset,
+                    request.relationship,
+                    request.tone,
+                    request.topics,
+                    request.boundaries,
+                ]
+            ):
+                persona_service.set_structured(
+                    user_id,
+                    preset=request.preset,
+                    relationship=request.relationship,
+                    tone=request.tone,
+                    topics=request.topics,
+                    boundaries=request.boundaries,
+                )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
         settings = settings_service.get_user_settings(user_id)
         prompt, source = persona_service.resolve(user_id, language=settings.language)
@@ -289,7 +292,10 @@ def create_admin_router(
                     detail="business_reply_mode must be 'auto', 'suggest', 'off', or null",
                 )
             updated = replace(updated, business_reply_mode=mode)
-        saved = settings_service.save_user_settings(updated)
+        try:
+            saved = settings_service.save_user_settings(updated)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         return {
             "user_id": saved.user_id,
             "language": saved.language,

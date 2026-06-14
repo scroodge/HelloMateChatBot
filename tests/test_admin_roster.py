@@ -85,3 +85,19 @@ def test_roster_includes_profile_only_contacts(tmp_path) -> None:
     profile_only = next(r for r in roster if r["user_id"] == 7431073781)
     assert profile_only["display_name"] == "Новый контакт"
     assert profile_only["language"] == "ru"  # defaults used when no settings row
+
+
+def test_persona_too_long_returns_422_not_500(tmp_path) -> None:
+    """An over-length raw prompt is a validation error (422), not a 500."""
+    from app.services.settings_service import PERSONA_PROMPT_MAX_LENGTH
+
+    with Database(f"sqlite:///{tmp_path / 'persona.db'}") as db:
+        client, _, _ = _make_client(db)
+        too_long = "я" * (PERSONA_PROMPT_MAX_LENGTH + 1)
+        resp = client.put(
+            "/api/admin/users/5336144564/persona",
+            json={"raw_prompt": too_long, "clear_structured": True},
+        )
+
+    assert resp.status_code == 422
+    assert "at most" in resp.json()["detail"]

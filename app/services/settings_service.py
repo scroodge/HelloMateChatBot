@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from app.services.conversation_starter_service import ConversationStarterService
 
 
-PERSONA_PROMPT_MAX_LENGTH = 4000
+PERSONA_PROMPT_MAX_LENGTH = 8000
 DEFAULT_PERSONA_BOT_SETTING = "default_persona"
 BUSINESS_REPLY_MODE_SETTING = "business_reply_mode"
 VALID_BUSINESS_REPLY_MODES = {"auto", "suggest", "off"}
