@@ -25,6 +25,11 @@ console, reply debouncing for rapid short messages, and a personal RAG knowledge
 - **Per-contact AI personas** — custom system prompts via `/setpersona` or the Mini App
 - **Reply debounce** — waits for a quiet period, then answers once when a contact sends several short messages in a row
 - **Shared chat memory** — per-contact history includes both the contact's and the owner's messages in managed chats
+- **Rolling conversation summary** — older history is compressed into a running summary so context survives beyond the recent window
+- **Per-contact durable facts** — the bot extracts and remembers stable facts about each contact (name, city, job, birthday, interests…) and injects them into the prompt
+- **Openness dial** — per-contact control of how much to disclose (`open` / `neutral` / `reserved`); applied last so it overrides persona and tone
+- **Owner style learning (opt-in)** — the bot can learn the owner's real writing manner per contact and mimic it; learns only from genuine owner replies, never from AI-generated ones
+- **Business reply modes** — per-contact and global: suggest a draft, auto-reply, or stay silent
 - Daily greetings with timezone-aware calendar logic
 - Random conversation starters and scheduled proactive greetings
 - Per-user settings, i18n (`ru`, `en`), and admin controls
@@ -227,6 +232,14 @@ chmod +x update.sh
 | `BOT_NAME` | `HelloMate` | Bot display name in persona templates |
 | `BUSINESS_MODE_ENABLED` | `true` | Enable Telegram Business mode (bot manages owner's private chats) |
 | `REPLY_DEBOUNCE_SECONDS` | `5` | Wait after the last contact message before replying; batches rapid short messages (`0` = off) |
+| `SUMMARY_ENABLED` | `true` | Enable the rolling conversation summary |
+| `SUMMARY_REFRESH_INTERVAL` | `10` | Refresh the summary after this many messages age out of the window |
+| `SUMMARY_MAX_CHARS` | `1500` | Max length of the stored summary |
+| `FACTS_ENABLED` | `true` | Enable per-contact durable fact extraction |
+| `FACTS_REFRESH_INTERVAL` | `5` | Re-extract facts after this many new contact messages |
+| `STYLE_ENABLED` | `true` | Enable owner writing-style learning (still opt-in per contact) |
+| `STYLE_REFRESH_INTERVAL` | `5` | Refresh the learned style after this many new owner messages |
+| `STYLE_MAX_CHARS` | `800` | Max length of the stored style profile |
 
 ## Commands
 
@@ -343,7 +356,7 @@ The yellow "Локальный режим" banner confirms auth is bypassed. All
 
 | Tab | What you can do |
 |-----|----------------|
-| **Контакты** | Browse contacts, edit AI persona per contact, toggle greetings |
+| **Контакты** | Browse contacts; edit AI persona, openness dial, style-learning toggle, durable facts, and greetings per contact; preview the resolved prompt |
 | **Плейграунд** | Test a persona live — pick a contact, type a message, see the AI draft and latency |
 | **Статистика** | Message / AI reply / greeting counts for the last 7 / 30 / 90 days |
 | **Настройки** | Set global reply mode (предлагать / авто / выкл), edit `default_persona`, etc. |
@@ -382,6 +395,10 @@ Restart the bot, then open your bot in Telegram and tap the Mini App button.
 - Phase 7 (partial): admin-gated API, contacts roster, persona playground, HTML admin console
 - **Telegram Business transport** (done): `business_connection` / `business_message` handlers, per-contact managed-chat memory, proactive greetings via `business_connection_id`
 - **Reply debounce** (done): `REPLY_DEBOUNCE_SECONDS` batches rapid contact messages before one AI reply
+- Phase 8 (done): PostgreSQL-ready persistence, admin Mini App contacts/playground/stats, per-contact Business reply modes (suggest / auto / off)
+- Phase 10 (done): rolling conversation summary for context beyond the recent window
+- Phase 11 (done): per-contact durable facts — LLM extraction, Mini App fact editor, prompt injection
+- Phase 12 (done): per-contact openness dial (`open` / `neutral` / `reserved`) and opt-in owner writing-style learning
 
 ## Contributing
 
