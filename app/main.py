@@ -71,6 +71,7 @@ from app.services.reply_debounce_service import ReplyDebounceService
 from app.services.reply_service import ReplyService
 from app.services.settings_service import SettingsService
 from app.services.style_service import StyleService
+from app.services.suggestions_service import SuggestionsService
 from app.services.summary_service import SummaryService
 from app.services.weather_service import WeatherService
 
@@ -145,6 +146,7 @@ def build_application(config: Config, database: Database):
         enabled=config.facts_enabled and config.ai_replies_enabled,
     )
     examples_service = ContactExamplesService(database.examples)
+    suggestions_service = SuggestionsService(database.suggestions)
     recall_service = RecallService(
         memory_service=memory_service,
         embedding_service=embedding_service,
@@ -192,6 +194,7 @@ def build_application(config: Config, database: Database):
     application.bot_data["style_service"] = style_service
     application.bot_data["recall_service"] = recall_service
     application.bot_data["examples_service"] = examples_service
+    application.bot_data["suggestions_service"] = suggestions_service
     application.bot_data["reply_service"] = reply_service
     application.bot_data["persona_service"] = persona_service
     application.bot_data["event_service"] = event_service

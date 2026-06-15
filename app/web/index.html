@@ -60,6 +60,20 @@
     }
     nav button.active { color: var(--btn); border-bottom-color: var(--btn); }
     nav button .icon { font-size: 18px; }
+    .nav-badge {
+      display: inline-block;
+      min-width: 16px;
+      padding: 0 4px;
+      margin-left: 3px;
+      font-size: 10px;
+      font-weight: 700;
+      line-height: 16px;
+      text-align: center;
+      border-radius: 8px;
+      background: #e53935;
+      color: #fff;
+      vertical-align: top;
+    }
 
     .dev-banner {
       background: #fff3cd;
@@ -318,6 +332,9 @@
   <button class="active" data-page="contacts" onclick="showPage('contacts')">
     <span class="icon">👥</span>Контакты
   </button>
+  <button data-page="suggestions" onclick="showPage('suggestions')">
+    <span class="icon">💡</span>Подсказки<span id="nav-suggest-badge" class="nav-badge" hidden></span>
+  </button>
   <button data-page="playground" onclick="showPage('playground')">
     <span class="icon">🧪</span>Плейграунд
   </button>
@@ -343,6 +360,14 @@
       </select>
     </div>
     <div id="contacts-list"><div class="spinner">Загрузка...</div></div>
+  </div>
+
+  <!-- ── SUGGESTIONS (inbox) ── -->
+  <div class="page" id="page-suggestions">
+    <div class="card" style="font-size:13px;color:var(--hint)">
+      Черновики ответов из режима «подсказки». Поправь, скопируй и отправь сам, или сохрани как эталон.
+    </div>
+    <div id="suggestions-list"><div class="spinner">Загрузка...</div></div>
   </div>
 
   <!-- ── CONTACT DETAIL ── -->
@@ -657,10 +682,11 @@ function showPage(name) {
   const btn = document.querySelector(`nav button[data-page="${name}"]`);
   if (btn) btn.classList.add('active');
 
-  if (name === 'contacts')   loadContacts();
-  if (name === 'stats')      loadStats();
-  if (name === 'settings')   loadGlobalSettings();
-  if (name === 'playground') loadPlaygroundContacts();
+  if (name === 'contacts')    loadContacts();
+  if (name === 'suggestions') loadSuggestions();
+  if (name === 'stats')       loadStats();
+  if (name === 'settings')    loadGlobalSettings();
+  if (name === 'playground')  loadPlaygroundContacts();
 }
 
 // ── Contacts ─────────────────────────────────────────────────────────────────
@@ -1070,6 +1096,92 @@ async function clearAllExamples() {
   }
 }
 
+// ── Suggest inbox ─────────────────────────────────────────────────────────────
+
+function updateSuggestBadge(n) {
+  const b = document.getElementById('nav-suggest-badge');
+  if (!b) return;
+  if (n > 0) { b.textContent = n; b.hidden = false; }
+  else { b.hidden = true; }
+}
+
+async function loadSuggestions() {
+  const el = document.getElementById('suggestions-list');
+  el.innerHTML = '<div class="spinner">Загрузка...</div>';
+  try {
+    const items = await get('/admin/suggestions');
+    updateSuggestBadge(items.length);
+    if (!items.length) {
+      el.innerHTML = '<div class="empty">Нет новых подсказок — всё разобрано 🎉</div>';
+      return;
+    }
+    el.innerHTML = items.map(s => {
+      const who = escHtml(s.display_name || 'ID ' + s.user_id);
+      const when = new Date(s.created_at).toLocaleString('ru', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+      return `<div class="card" id="sugg-${s.id}">
+        <div class="contact-meta" style="display:flex;justify-content:space-between">
+          <b>${who}</b><span>${when}</span>
+        </div>
+        <div class="msg-bubble msg-assistant" style="margin:6px 0">${escHtml(s.contact_message)}</div>
+        <div class="contact-meta">Черновик (поправь при необходимости):</div>
+        <textarea id="sugg-text-${s.id}" rows="3" style="margin:4px 0">${escHtml(s.draft_text)}</textarea>
+        <div class="row" style="flex-wrap:wrap;gap:6px">
+          <button class="btn btn-sm" onclick="copySuggestion(${s.id})" style="width:auto">📋 Копировать</button>
+          <button class="btn btn-sm" onclick="saveSuggestion(${s.id})" style="width:auto">🎯 В эталоны</button>
+          <button class="btn btn-sm btn-secondary" onclick="dismissSuggestion(${s.id})" style="width:auto">🗑 Скрыть</button>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    el.innerHTML = `<div class="error">Ошибка: ${e.message}</div>`;
+  }
+}
+
+function copySuggestion(id) {
+  const text = document.getElementById('sugg-text-' + id).value;
+  const done = () => { haptic('success'); tg.showAlert?.('Скопировано ✓'); };
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(text).then(done).catch(() => tg.showAlert?.('Не удалось скопировать'));
+  } else {
+    const ta = document.getElementById('sugg-text-' + id);
+    ta.select(); document.execCommand('copy'); done();
+  }
+}
+
+async function saveSuggestion(id) {
+  const reply_text = document.getElementById('sugg-text-' + id).value.trim();
+  if (!reply_text) { tg.showAlert?.('Пустой ответ'); return; }
+  try {
+    const res = await post(`/admin/suggestions/${id}/save`, { reply_text });
+    removeSuggestionCard(id, res.pending);
+    tg.showAlert?.('Сохранено в эталоны ✓');
+  } catch(e) {
+    tg.showAlert?.('Ошибка: ' + e.message);
+  }
+}
+
+async function dismissSuggestion(id) {
+  try {
+    const res = await post(`/admin/suggestions/${id}/dismiss`);
+    removeSuggestionCard(id, res.pending);
+  } catch(e) {
+    tg.showAlert?.('Ошибка: ' + e.message);
+  }
+}
+
+function removeSuggestionCard(id, pending) {
+  document.getElementById('sugg-' + id)?.remove();
+  updateSuggestBadge(pending);
+  const list = document.getElementById('suggestions-list');
+  if (!list.querySelector('.card')) {
+    list.innerHTML = '<div class="empty">Нет новых подсказок — всё разобрано 🎉</div>';
+  }
+}
+
+function haptic(type) {
+  try { tg.HapticFeedback?.notificationOccurred?.(type); } catch (_) {}
+}
+
 // ── Learned style ────────────────────────────────────────────────────────────
 
 function renderStyle(profile) {
@@ -1317,6 +1429,8 @@ if (!initData && !isLocalDev) {
     document.getElementById('dev-banner').hidden = false;
   }
   loadContacts();
+  // Prime the suggestions badge without switching tabs.
+  get('/admin/suggestions').then(items => updateSuggestBadge(items.length)).catch(() => {});
 }
 </script>
 </body>

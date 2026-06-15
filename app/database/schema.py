@@ -189,6 +189,20 @@ contact_facts_meta = Table(
     Column("updated_at", Text, nullable=False),
 )
 
+suggestions = Table(
+    "suggestions",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("user_id", Integer, nullable=False),  # the contact
+    Column("contact_message", Text, nullable=False),
+    Column("draft_text", Text, nullable=False),
+    # "pending" | "saved" | "dismissed" | "superseded"
+    Column("status", Text, nullable=False, default="pending"),
+    Column("created_at", Text, nullable=False),
+    Index("idx_suggestions_status_created", "status", "created_at"),
+    Index("idx_suggestions_user", "user_id"),
+)
+
 contact_examples = Table(
     "contact_examples",
     metadata,

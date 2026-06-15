@@ -24,6 +24,7 @@ from app.services.persona_service import PersonaService
 from app.services.profile_service import ProfileService
 from app.services.reply_service import ReplyService
 from app.services.settings_service import SettingsService
+from app.services.suggestions_service import SuggestionsService
 
 # ---------------------------------------------------------------------------
 # Pydantic schemas
@@ -67,6 +68,12 @@ class ContactExampleWriteRequest(BaseModel):
     reply_text: str
 
 
+class SuggestionSaveRequest(BaseModel):
+    # Optional edits before saving the suggestion as a few-shot example.
+    contact_message: str | None = None
+    reply_text: str | None = None
+
+
 # ---------------------------------------------------------------------------
 # Router factory
 # ---------------------------------------------------------------------------
@@ -86,6 +93,7 @@ def create_admin_router(
     event_repository: EventRepository | None = None,
     facts_service: ContactFactsService | None = None,
     examples_service: ContactExamplesService | None = None,
+    suggestions_service: SuggestionsService | None = None,
     *,
     mini_app_dev: bool = False,
     dev_user_id: int | None = None,
@@ -461,6 +469,58 @@ def create_admin_router(
             raise HTTPException(status_code=503, detail="Examples service not enabled")
         examples_service.clear_examples(user_id)
         return []
+
+    # -----------------------------------------------------------------------
+    # Suggest inbox
+    # -----------------------------------------------------------------------
+
+    @router.get("/suggestions")
+    async def list_suggestions(caller_id: int = AdminUser) -> list[dict[str, Any]]:
+        """Return pending suggestions (drafted replies awaiting review)."""
+        if suggestions_service is None:
+            return []
+        profiles = {p.user_id: p for p in profile_service.list_profiles()}
+        out = []
+        for s in suggestions_service.list_pending():
+            profile = profiles.get(s.user_id)
+            out.append(
+                {
+                    "id": s.id,
+                    "user_id": s.user_id,
+                    "display_name": profile.display_name if profile else None,
+                    "contact_message": s.contact_message,
+                    "draft_text": s.draft_text,
+                    "created_at": s.created_at.isoformat(),
+                }
+            )
+        return out
+
+    @router.post("/suggestions/{suggestion_id}/dismiss")
+    async def dismiss_suggestion(suggestion_id: int, caller_id: int = AdminUser) -> dict[str, Any]:
+        """Mark a suggestion as dismissed (removes it from the inbox)."""
+        if suggestions_service is None:
+            raise HTTPException(status_code=503, detail="Suggestions service not enabled")
+        suggestions_service.dismiss(suggestion_id)
+        return {"pending": suggestions_service.count_pending()}
+
+    @router.post("/suggestions/{suggestion_id}/save")
+    async def save_suggestion_as_example(
+        suggestion_id: int, request: SuggestionSaveRequest, caller_id: int = AdminUser
+    ) -> dict[str, Any]:
+        """Save a suggestion (optionally edited) as a few-shot example, then resolve it."""
+        if suggestions_service is None or examples_service is None:
+            raise HTTPException(status_code=503, detail="Suggestions service not enabled")
+        suggestion = suggestions_service.get(suggestion_id)
+        if suggestion is None:
+            raise HTTPException(status_code=404, detail="Suggestion not found")
+        contact_message = request.contact_message or suggestion.contact_message
+        reply_text = request.reply_text or suggestion.draft_text
+        try:
+            examples_service.add_example(suggestion.user_id, contact_message, reply_text)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        suggestions_service.mark_saved(suggestion_id)
+        return {"pending": suggestions_service.count_pending()}
 
     # -----------------------------------------------------------------------
     # 12: Learned owner style

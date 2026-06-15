@@ -158,6 +158,8 @@ async def _process_incoming_text(
     if recall_service is not None and message_text and not sender_is_owner:
         recall_service.schedule_index(contact_user_id)
 
+    suggestions_service = context.bot_data.get("suggestions_service")
+
     # Owner replies feed style learning; refresh the profile after an owner message.
     style_service = context.bot_data.get("style_service")
     if isinstance(style_service, StyleService) and message_text and sender_is_owner:
@@ -185,6 +187,7 @@ async def _process_incoming_text(
             reply_mode=reply_mode,
             on_suggest=on_suggest,
             event_service=event_service,
+            suggestions_service=suggestions_service,
         )
         return
 
@@ -235,6 +238,7 @@ async def _process_incoming_text(
         reply_mode=reply_mode,
         on_suggest=on_suggest,
         event_service=event_service,
+        suggestions_service=suggestions_service,
     )
 
 
@@ -247,6 +251,7 @@ async def _deliver_ai_reply(
     reply_mode: str,
     on_suggest: ReplyFn | None,
     event_service: EventService | None,
+    suggestions_service: object | None = None,
 ) -> None:
     """Route AI reply based on mode: auto sends directly, suggest drafts to owner, off skips."""
 
@@ -271,8 +276,11 @@ async def _deliver_ai_reply(
             contact_user_id,
             "got draft" if draft else "None",
         )
-        if draft and on_suggest is not None:
-            await on_suggest(draft)
+        if draft:
+            if suggestions_service is not None:
+                suggestions_service.record(contact_user_id, message_text, draft)
+            if on_suggest is not None:
+                await on_suggest(draft)
         return
 
     # auto (default)

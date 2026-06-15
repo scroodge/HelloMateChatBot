@@ -26,6 +26,7 @@ from app.database.repositories.memory import MemoryRepositoryImpl
 from app.database.repositories.mood import MoodRepositoryImpl
 from app.database.repositories.profile import ProfileRepositoryImpl
 from app.database.repositories.settings import SettingsRepositoryImpl
+from app.database.repositories.suggestions import SuggestionsRepositoryImpl
 from app.database.schema import metadata
 
 
@@ -38,6 +39,7 @@ class Database:
         self.business = BusinessRepositoryImpl(self)
         self.events = EventRepositoryImpl(self)
         self.examples = ContactExamplesRepositoryImpl(self)
+        self.suggestions = SuggestionsRepositoryImpl(self)
         self.facts = ContactFactsRepositoryImpl(self)
         self.greetings = GreetingRepositoryImpl(self)
         self.greeting_rules = GreetingRulesRepositoryImpl(self)
