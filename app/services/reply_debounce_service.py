@@ -91,7 +91,10 @@ class ReplyDebounceService:
             return
 
         combined = "\n".join(buffer.parts)
-        logger.debug(
+        # INFO when several messages were coalesced so batching is visible in prod
+        # logs; DEBUG for the common single-message case to avoid noise.
+        log = logger.info if len(buffer.parts) > 1 else logger.debug
+        log(
             "Debounced reply for contact %s (%d parts): %r",
             contact_user_id,
             len(buffer.parts),
