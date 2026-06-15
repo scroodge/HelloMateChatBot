@@ -147,9 +147,7 @@ def create_admin_router(
         """Return full info for a single contact."""
         settings = settings_service.get_user_settings(user_id)
         profile = profile_service.get_profile(user_id)
-        prompt, persona_source = persona_service.resolve(
-            user_id, language=settings.language
-        )
+        prompt, persona_source = persona_service.resolve(user_id, language=settings.language)
         recent_mood = mood_service.latest_mood(user_id)
         recent_messages = memory_service.repository.list_messages(user_id, limit=5)
 
@@ -368,9 +366,7 @@ def create_admin_router(
         return facts_service.facts_as_dict(user_id)
 
     @router.delete("/users/{user_id}/facts/{key}")
-    async def delete_fact(
-        user_id: int, key: str, caller_id: int = AdminUser
-    ) -> dict[str, str]:
+    async def delete_fact(user_id: int, key: str, caller_id: int = AdminUser) -> dict[str, str]:
         """Delete a single fact for a contact."""
         if facts_service is None:
             raise HTTPException(status_code=503, detail="Facts service not enabled")
@@ -413,9 +409,7 @@ def create_admin_router(
     # -----------------------------------------------------------------------
 
     @router.get("/stats")
-    async def get_stats(
-        days: int = 30, caller_id: int = AdminUser
-    ) -> dict[str, Any]:
+    async def get_stats(days: int = 30, caller_id: int = AdminUser) -> dict[str, Any]:
         """Return usage stats for the last N days (default 30)."""
         from datetime import datetime, timedelta
 
@@ -444,19 +438,24 @@ def create_admin_router(
                     "display_name": profile.display_name if profile else None,
                     "messages": messages_per_user.get(user_id, 0),
                     "ai_replies": replies_per_user.get(user_id, 0),
-                    "last_seen_at": (
-                        profile.last_seen_at.isoformat() if profile else None
-                    ),
+                    "last_seen_at": (profile.last_seen_at.isoformat() if profile else None),
                 }
             )
 
         per_user.sort(key=lambda x: x["messages"], reverse=True)
+
+        # Phase 13: semantic recall index coverage (all-time, not period-bound).
+        recall_indexed_messages, recall_indexed_contacts = memory_service.recall_index_stats()
 
         return {
             "period_days": days,
             "since": since.isoformat(),
             "totals": type_counts,
             "contacts": per_user,
+            "recall": {
+                "indexed_messages": recall_indexed_messages,
+                "indexed_contacts": recall_indexed_contacts,
+            },
         }
 
     return router

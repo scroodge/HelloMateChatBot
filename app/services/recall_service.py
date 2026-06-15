@@ -92,7 +92,7 @@ class RecallService:
 
             if new_watermark > watermark:
                 self.memory_service.set_recall_watermark(user_id, new_watermark)
-                logger.debug(
+                logger.info(
                     "Recall index updated for contact %s: watermark %d → %d (%d msgs)",
                     user_id,
                     watermark,
@@ -156,6 +156,13 @@ class RecallService:
 
         # Sort by message_id ascending so the context reads chronologically.
         messages.sort(key=lambda m: m.id or 0)
+        top_score = scored[0][0]
+        logger.info(
+            "Recall hit for contact %s: %d msg(s) injected (top score %.3f)",
+            user_id,
+            len(messages),
+            top_score,
+        )
         return " | ".join(m.content for m in messages)
 
     def _live_window_cutoff(self, user_id: int, exclude_recent_n: int) -> int | None:

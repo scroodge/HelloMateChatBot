@@ -159,6 +159,10 @@ class MemoryService:
     def list_embeddings_for_user(self, user_id: int) -> list[tuple[int, bytes]]:
         return self.repository.list_embeddings_for_user(user_id)
 
+    def recall_index_stats(self) -> tuple[int, int]:
+        """Return (total indexed messages, number of contacts with a recall index)."""
+        return self.repository.recall_index_stats()
+
     def list_messages_by_ids(
         self, user_id: int, message_ids: set[int]
     ) -> list[ConversationMessage]:

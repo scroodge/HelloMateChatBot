@@ -66,6 +66,8 @@ class MemoryRepository(Protocol):
 
     def list_embeddings_for_user(self, user_id: int) -> list[tuple[int, bytes]]: ...
 
+    def recall_index_stats(self) -> tuple[int, int]: ...
+
     def list_messages_by_ids(
         self, user_id: int, message_ids: set[int]
     ) -> list[ConversationMessage]: ...
@@ -336,6 +338,21 @@ class MemoryRepositoryImpl:
                 ).where(conversation_message_embeddings.c.user_id == user_id)
             ).all()
         return [(int(row.message_id), row.embedding) for row in rows]
+
+    def recall_index_stats(self) -> tuple[int, int]:
+        """Return (total embeddings, number of distinct indexed contacts)."""
+        with self._db.engine.connect() as connection:
+            total = int(
+                connection.execute(
+                    select(func.count()).select_from(conversation_message_embeddings)
+                ).scalar_one()
+            )
+            contacts = int(
+                connection.execute(
+                    select(func.count(func.distinct(conversation_message_embeddings.c.user_id)))
+                ).scalar_one()
+            )
+        return total, contacts
 
     def list_messages_by_ids(
         self, user_id: int, message_ids: set[int]

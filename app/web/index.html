@@ -480,6 +480,10 @@
       </select>
     </div>
     <div class="stat-grid" id="stat-totals"></div>
+    <div class="card" id="stat-recall-card" style="display:none">
+      <div class="card-title">🧠 Семантическая память</div>
+      <div id="stat-recall"></div>
+    </div>
     <div class="card">
       <div class="card-title">По контактам</div>
       <div id="stat-contacts"></div>
@@ -980,6 +984,17 @@ async function loadStats() {
         <div class="stat-label">${label}</div>
       </div>`
     ).join('');
+
+    const recall = s.recall;
+    const recallCard = document.getElementById('stat-recall-card');
+    if (recall) {
+      recallCard.style.display = '';
+      document.getElementById('stat-recall').innerHTML =
+        `<div class="contact-meta">📚 Проиндексировано сообщений: <b>${recall.indexed_messages}</b>` +
+        ` · 👥 контактов с памятью: <b>${recall.indexed_contacts}</b></div>`;
+    } else {
+      recallCard.style.display = 'none';
+    }
 
     const contacts = s.contacts || [];
     document.getElementById('stat-contacts').innerHTML = contacts.length
