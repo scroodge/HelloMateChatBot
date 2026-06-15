@@ -92,6 +92,17 @@
       margin-bottom: 8px;
     }
 
+    details.accordion > summary { list-style: none; cursor: pointer; }
+    details.accordion > summary::-webkit-details-marker { display: none; }
+    .accordion-summary::after {
+      content: ' ▸';
+      font-size: 10px;
+      opacity: .6;
+      transition: transform .2s;
+      display: inline-block;
+    }
+    details.accordion[open] > .accordion-summary::after { transform: rotate(90deg); }
+
     /* ── contacts list ── */
     .contact-item {
       display: flex;
@@ -346,10 +357,10 @@
     </div>
 
     <!-- resolved preview -->
-    <div class="card" id="resolved-preview-card" style="display:none">
-      <div class="card-title">Итоговый промпт</div>
-      <div id="resolved-preview" style="font-size:12px;white-space:pre-wrap;color:var(--hint)"></div>
-    </div>
+    <details class="card accordion" id="resolved-preview-card" style="display:none">
+      <summary class="card-title accordion-summary">Итоговый промпт</summary>
+      <div id="resolved-preview" style="font-size:12px;white-space:pre-wrap;color:var(--hint);margin-top:8px"></div>
+    </details>
 
     <!-- settings -->
     <div class="card">
