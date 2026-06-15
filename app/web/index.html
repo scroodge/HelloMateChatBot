@@ -74,6 +74,25 @@
       color: #fff;
       vertical-align: top;
     }
+    #toast {
+      position: fixed;
+      left: 50%;
+      bottom: 24px;
+      transform: translateX(-50%) translateY(20px);
+      background: rgba(40,40,45,.95);
+      color: #fff;
+      padding: 10px 18px;
+      border-radius: 22px;
+      font-size: 13px;
+      font-weight: 600;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .2s, transform .2s;
+      z-index: 1000;
+      max-width: 80%;
+      text-align: center;
+    }
+    #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
     .dev-banner {
       background: #fff3cd;
@@ -327,6 +346,7 @@
 </div>
 
 <div id="dev-banner" class="dev-banner" hidden>Локальный режим — авторизация Telegram отключена</div>
+<div id="toast"></div>
 
 <nav id="nav">
   <button class="active" data-page="contacts" onclick="showPage('contacts')">
@@ -663,6 +683,26 @@ const post = (path, body)  => api('POST',   path, body);
 const put  = (path, body)  => api('PUT',    path, body);
 const del  = (path)        => api('DELETE', path);
 
+// ── UX helpers (toast, haptics) ────────────────────────────────────────────────
+
+let _toastTimer = null;
+function toast(msg, ok = true) {
+  const el = document.getElementById('toast');
+  if (!el) return;
+  el.textContent = (ok ? '✓ ' : '') + msg;
+  el.classList.add('show');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.classList.remove('show'), 1800);
+  if (ok) haptic('success');
+}
+
+function haptic(type) {
+  try { tg.HapticFeedback?.notificationOccurred?.(type); } catch (_) {}
+}
+function hapticTap() {
+  try { tg.HapticFeedback?.impactOccurred?.('light'); } catch (_) {}
+}
+
 // ── State ────────────────────────────────────────────────────────────────────
 
 let currentUserId = null;
@@ -681,6 +721,8 @@ function showPage(name) {
   document.getElementById('page-' + name).classList.add('active');
   const btn = document.querySelector(`nav button[data-page="${name}"]`);
   if (btn) btn.classList.add('active');
+  hapticTap();
+  hideBackButton();  // top-level pages don't need the native back button
 
   if (name === 'contacts')    loadContacts();
   if (name === 'suggestions') loadSuggestions();
@@ -773,6 +815,22 @@ function showDetailTab(name) {
   });
 }
 
+let _backHandler = null;
+function showBackButton(onBack) {
+  const bb = tg.BackButton;
+  if (!bb) return;
+  if (_backHandler) bb.offClick(_backHandler);
+  _backHandler = onBack;
+  bb.onClick(onBack);
+  bb.show();
+}
+function hideBackButton() {
+  const bb = tg.BackButton;
+  if (!bb) return;
+  if (_backHandler) { bb.offClick(_backHandler); _backHandler = null; }
+  bb.hide();
+}
+
 async function openContact(userId) {
   currentUserId = userId;
   topicTags = [];
@@ -780,10 +838,12 @@ async function openContact(userId) {
   selectedPreset = null;
   personaTab = 'preset';
   showDetailTab('persona');
+  hapticTap();
 
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById('page-detail').classList.add('active');
   document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  showBackButton(() => showPage('contacts'));
 
   // load presets first
   if (!presets.length) {
@@ -936,7 +996,7 @@ async function savePersona() {
     }
     const res = await put('/admin/users/' + currentUserId + '/persona', body);
     updatePersonaSourceLabel(res.source, res.resolved_prompt);
-    tg.showAlert('Персона сохранена');
+    toast('Персона сохранена');
   } catch(e) {
     tg.showAlert('Ошибка: ' + e.message);
   }
@@ -955,7 +1015,7 @@ async function clearPersona() {
       renderTags('topics'); renderTags('boundaries');
       selectedPreset = null; renderPresetGrid();
       updatePersonaSourceLabel('builtin', '');
-      tg.showAlert('Персона сброшена');
+      toast('Персона сброшена');
     } catch(e) { tg.showAlert('Ошибка: ' + e.message); }
   });
 }
@@ -975,7 +1035,7 @@ async function saveContactSettings() {
       openness:                openness || null,
       style_learning_enabled:  document.getElementById('f-style-learning').checked,
     });
-    tg.showAlert('Настройки сохранены');
+    toast('Настройки сохранены');
   } catch(e) {
     tg.showAlert('Ошибка: ' + e.message);
   }
@@ -1139,7 +1199,7 @@ async function loadSuggestions() {
 
 function copySuggestion(id) {
   const text = document.getElementById('sugg-text-' + id).value;
-  const done = () => { haptic('success'); tg.showAlert?.('Скопировано ✓'); };
+  const done = () => toast('Скопировано');
   if (navigator.clipboard?.writeText) {
     navigator.clipboard.writeText(text).then(done).catch(() => tg.showAlert?.('Не удалось скопировать'));
   } else {
@@ -1154,7 +1214,7 @@ async function saveSuggestion(id) {
   try {
     const res = await post(`/admin/suggestions/${id}/save`, { reply_text });
     removeSuggestionCard(id, res.pending);
-    tg.showAlert?.('Сохранено в эталоны ✓');
+    toast('Сохранено в эталоны');
   } catch(e) {
     tg.showAlert?.('Ошибка: ' + e.message);
   }
@@ -1176,10 +1236,6 @@ function removeSuggestionCard(id, pending) {
   if (!list.querySelector('.card')) {
     list.innerHTML = '<div class="empty">Нет новых подсказок — всё разобрано 🎉</div>';
   }
-}
-
-function haptic(type) {
-  try { tg.HapticFeedback?.notificationOccurred?.(type); } catch (_) {}
 }
 
 // ── Learned style ────────────────────────────────────────────────────────────
@@ -1245,7 +1301,7 @@ async function confirmSaveExample() {
   if (!contact_message || !reply_text) { tg.showAlert('Заполни оба поля'); return; }
   try {
     await post(`/admin/users/${lastPlaygroundExchange.user_id}/examples`, { contact_message, reply_text });
-    tg.showAlert('Сохранено в эталоны ✓');
+    toast('Сохранено в эталоны');
     cancelExampleEditor();
   } catch(e) {
     tg.showAlert('Ошибка: ' + e.message);
@@ -1402,7 +1458,7 @@ async function saveGlobalSetting() {
   if (!key || !val) { tg.showAlert('Заполните ключ и значение'); return; }
   try {
     await put('/admin/settings/' + encodeURIComponent(key) + '?value=' + encodeURIComponent(val));
-    tg.showAlert('Сохранено');
+    toast('Сохранено');
     loadGlobalSettings();
   } catch(e) {
     tg.showAlert('Ошибка: ' + e.message);
