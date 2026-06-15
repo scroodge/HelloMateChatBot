@@ -13,7 +13,6 @@ from app.services.settings_service import (
     SettingsService,
 )
 
-
 # ── Mode resolution ────────────────────────────────────────────────────────────
 
 
@@ -171,12 +170,12 @@ def _suggest_context_capture():
 
 @pytest.mark.asyncio
 async def test_suggestion_short_draft_has_copy_button() -> None:
-    from app.handlers.business import _build_suggest_fn
+    from app.handlers.suggest import build_suggest_fn
 
     context, captured = _suggest_context_capture()
-    on_suggest = _build_suggest_fn(
+    on_suggest = build_suggest_fn(
         context=context,
-        owner_user_id=100000001,
+        target_user_ids=[100000001],
         contact_display_name="Аня",
         contact_message="привет",
     )
@@ -191,13 +190,13 @@ async def test_suggestion_short_draft_has_copy_button() -> None:
 @pytest.mark.asyncio
 async def test_suggestion_long_draft_omits_copy_button() -> None:
     """Drafts over 256 chars must NOT attach a CopyTextButton (Telegram rejects it)."""
-    from app.handlers.business import _build_suggest_fn
+    from app.handlers.suggest import build_suggest_fn
 
     context, captured = _suggest_context_capture()
     long_draft = "а" * 300
-    on_suggest = _build_suggest_fn(
+    on_suggest = build_suggest_fn(
         context=context,
-        owner_user_id=100000001,
+        target_user_ids=[100000001],
         contact_display_name="Аня",
         contact_message="расскажи подробно",
     )

@@ -4,19 +4,17 @@ from __future__ import annotations
 
 import logging
 
-from telegram import CopyTextButton, InlineKeyboardButton, InlineKeyboardMarkup, Message, Update
+from telegram import Message, Update
 from telegram.ext import ContextTypes
 
-from app.handlers.incoming import ReplyFn, handle_incoming_text
+from app.handlers.incoming import handle_incoming_text
+from app.handlers.suggest import build_suggest_fn
 from app.services.business_service import BusinessService
 from app.services.memory_service import MemoryService
 from app.services.reply_service import ReplyService
 from app.services.settings_service import SettingsService
 
 logger = logging.getLogger(__name__)
-
-# Telegram API limit for InlineKeyboardButton.copy_text (CopyTextButton.text)
-COPY_TEXT_MAX_LEN = 256
 
 
 def _is_bot_echo(message: Message) -> bool:
@@ -25,9 +23,7 @@ def _is_bot_echo(message: Message) -> bool:
     return bool(message.sender_business_bot)
 
 
-async def business_connection_handler(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
-) -> None:
+async def business_connection_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Persist business connection state when the owner connects or edits the bot."""
 
     connection = update.business_connection
@@ -52,9 +48,7 @@ async def business_connection_handler(
     )
 
 
-async def business_message_handler(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
-) -> None:
+async def business_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle text messages in chats managed via Telegram Business."""
 
     message = update.business_message
@@ -105,6 +99,7 @@ async def business_message_handler(
 
     if message.text:
         if sender_is_owner:
+
             async def owner_reply_fn(text: str) -> None:
                 # reply_text auto-forwards the message's own business_connection_id
                 await message.reply_text(text)
@@ -126,7 +121,8 @@ async def business_message_handler(
             reply_mode = settings_service.get_business_reply_mode(contact_user_id)
         logger.info(
             "business contact message from %s, resolved reply_mode=%s",
-            contact_user_id, reply_mode,
+            contact_user_id,
+            reply_mode,
         )
 
         async def reply_fn(text: str) -> None:
@@ -134,9 +130,9 @@ async def business_message_handler(
 
         on_suggest = None
         if reply_mode == "suggest":
-            on_suggest = _build_suggest_fn(
+            on_suggest = build_suggest_fn(
                 context=context,
-                owner_user_id=connection.owner_user_id,
+                target_user_ids=[connection.owner_user_id],
                 contact_display_name=contact_display_name or str(contact_user_id),
                 contact_message=message.text,
             )
@@ -160,47 +156,6 @@ async def business_message_handler(
             owner_user_id=connection.owner_user_id,
             context=context,
         )
-
-
-def _build_suggest_fn(
-    *,
-    context: ContextTypes.DEFAULT_TYPE,
-    owner_user_id: int,
-    contact_display_name: str,
-    contact_message: str,
-) -> ReplyFn:
-    """Return an on_suggest callback that DMs the owner with a draft + copy button."""
-
-    async def _send_suggestion(draft: str) -> None:
-        # Plain text (no parse_mode) so contact names / drafts can't break Markdown.
-        notification = (
-            f"💬 {contact_display_name}:\n"
-            f"{contact_message}\n\n"
-            f"✏️ Готовый ответ:\n"
-            f"{draft}"
-        )
-        # Telegram limits CopyTextButton text to 256 chars; for longer drafts the
-        # owner copies the message body directly (long-press → copy).
-        reply_markup = None
-        if 1 <= len(draft) <= COPY_TEXT_MAX_LEN:
-            reply_markup = InlineKeyboardMarkup([[
-                InlineKeyboardButton(
-                    text="📋 Скопировать ответ",
-                    copy_text=CopyTextButton(text=draft),
-                )
-            ]])
-        try:
-            await context.bot.send_message(
-                chat_id=owner_user_id,
-                text=notification,
-                reply_markup=reply_markup,
-            )
-        except Exception:
-            logger.exception(
-                "Failed to send suggestion DM to owner %s", owner_user_id
-            )
-
-    return _send_suggestion
 
 
 async def _handle_business_voice(
@@ -233,9 +188,9 @@ async def _handle_business_voice(
         if reply_mode == "suggest":
             draft = await reply_service.draft_reply(contact_user_id, transcription)
             if draft:
-                on_suggest = _build_suggest_fn(
+                on_suggest = build_suggest_fn(
                     context=context,
-                    owner_user_id=owner_user_id,
+                    target_user_ids=[owner_user_id],
                     contact_display_name=str(contact_user_id),
                     contact_message=f"🎤 {transcription}",
                 )

@@ -169,7 +169,10 @@ async def _process_incoming_text(
         logger.error("Greeting text is not configured")
         return
 
-    if not settings_service.is_greeting_enabled(contact_user_id):
+    # A greeting is an automatic message to the contact. Outside "auto" mode the
+    # bot must never write to the contact on its own, so suppress greetings in
+    # suggest/off and route straight to the (mode-aware) reply delivery.
+    if reply_mode != "auto" or not settings_service.is_greeting_enabled(contact_user_id):
         await _deliver_ai_reply(
             contact_user_id=contact_user_id,
             message_text=message_text,
@@ -184,10 +187,9 @@ async def _process_incoming_text(
     sent_greeting = False
     now = datetime.now(tz=timezone) if timezone is not None else datetime.now()
 
-    has_rules = (
-        isinstance(greeting_rules_service, GreetingRulesService)
-        and greeting_rules_service.has_rules(contact_user_id)
-    )
+    has_rules = isinstance(
+        greeting_rules_service, GreetingRulesService
+    ) and greeting_rules_service.has_rules(contact_user_id)
     if has_rules:
         due_rules = greeting_rules_service.get_due_rules(contact_user_id, now, require_hour=False)
         if due_rules:
@@ -202,9 +204,7 @@ async def _process_incoming_text(
     else:
         user_settings = settings_service.get_user_settings(contact_user_id)
         starters = (
-            starter_service
-            if isinstance(starter_service, ConversationStarterService)
-            else None
+            starter_service if isinstance(starter_service, ConversationStarterService) else None
         )
         if greeting_service.should_send_greeting(contact_user_id, user_settings, now=now):
             text = settings_service.resolve_greeting_text(

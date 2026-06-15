@@ -8,6 +8,8 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from app.handlers.incoming import handle_incoming_text
+from app.handlers.suggest import build_suggest_fn
+from app.services.settings_service import SettingsService
 
 logger = logging.getLogger(__name__)
 
@@ -23,8 +25,28 @@ async def private_text_message(update: Update, context: ContextTypes.DEFAULT_TYP
     user_id = update.effective_user.id
     message_text = update.effective_message.text or ""
 
+    # Respect the contact's reply mode here too: a direct chat must never get an
+    # automatic reply unless the resolved mode is explicitly "auto". The default
+    # is "suggest", so by default the bot only drafts to the admins — it never
+    # answers the person on its own.
+    settings_service = context.bot_data.get("settings_service")
+    reply_mode = "auto"
+    if isinstance(settings_service, SettingsService):
+        reply_mode = settings_service.get_business_reply_mode(user_id)
+
     async def reply_fn(text: str) -> None:
         await update.effective_message.reply_text(text)
+
+    on_suggest = None
+    if reply_mode == "suggest":
+        admin_ids = sorted(context.bot_data.get("admin_user_ids", set()))
+        if admin_ids:
+            on_suggest = build_suggest_fn(
+                context=context,
+                target_user_ids=admin_ids,
+                contact_display_name=update.effective_user.full_name or str(user_id),
+                contact_message=message_text,
+            )
 
     await handle_incoming_text(
         contact_user_id=user_id,
@@ -33,4 +55,6 @@ async def private_text_message(update: Update, context: ContextTypes.DEFAULT_TYP
         reply_fn=reply_fn,
         sender_is_owner=False,
         contact_display_name=update.effective_user.full_name or None,
+        reply_mode=reply_mode,
+        on_suggest=on_suggest,
     )
