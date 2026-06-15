@@ -141,6 +141,13 @@ def create_admin_router(
                     "greeting_enabled": settings.greeting_enabled,
                     "persona_source": persona_source,
                     "last_seen_at": profile.last_seen_at.isoformat() if profile else None,
+                    "reply_mode": settings_service.get_business_reply_mode(user_id),
+                    "openness": settings_service.get_openness(user_id),
+                    "examples_count": (
+                        examples_service.repository.count_examples(user_id)
+                        if examples_service is not None
+                        else 0
+                    ),
                 }
             )
         result.sort(

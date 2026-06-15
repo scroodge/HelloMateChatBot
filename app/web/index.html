@@ -135,6 +135,15 @@
     .badge-struct   { background: #e8f5e9; color: #2e7d32; }
     .badge-global   { background: #e3f2fd; color: #1565c0; }
     .badge-builtin  { background: var(--bg2); color: var(--hint); border: 1px solid var(--border); }
+    .chip {
+      font-size: 10px;
+      padding: 1px 7px;
+      border-radius: 20px;
+      background: var(--bg2);
+      color: var(--hint);
+      border: 1px solid var(--border);
+      white-space: nowrap;
+    }
 
     /* ── forms ── */
     label { display: block; font-size: 12px; color: var(--hint); margin-bottom: 4px; margin-top: 10px; }
@@ -304,6 +313,15 @@
 
   <!-- ── CONTACTS ── -->
   <div class="page active" id="page-contacts">
+    <div class="row" style="margin-bottom:10px;gap:8px">
+      <input type="text" id="contacts-search" placeholder="🔍 Поиск контакта..."
+        oninput="renderContacts()" style="flex:1">
+      <select id="contacts-sort" onchange="renderContacts()" style="width:auto;flex-shrink:0">
+        <option value="recent">Недавние</option>
+        <option value="name">По имени</option>
+        <option value="examples">По эталонам</option>
+      </select>
+    </div>
     <div id="contacts-list"><div class="spinner">Загрузка...</div></div>
   </div>
 
@@ -621,29 +639,65 @@ const PRESET_ICONS = {
   mentor: '🎓', assistant: '🤖', colleague: '💼',
 };
 
+const REPLY_MODE_BADGE = {
+  suggest: ['💬', 'подсказки'],
+  auto:    ['🤖', 'авто'],
+  off:     ['🔇', 'выкл'],
+};
+
 async function loadContacts() {
   const el = document.getElementById('contacts-list');
   el.innerHTML = '<div class="spinner">Загрузка...</div>';
   try {
-    const users = await get('/admin/users');
-    contactsCache = users;
-    if (!users.length) { el.innerHTML = '<div class="empty">Контакты не найдены</div>'; return; }
-    el.innerHTML = users.map(u => {
-      const initials = (u.display_name || String(u.user_id)).slice(0,2).toUpperCase();
-      const [cls, label] = PERSONA_LABELS[u.persona_source] || ['badge-builtin','?'];
-      const seen = u.last_seen_at ? new Date(u.last_seen_at).toLocaleDateString('ru') : '—';
-      return `<div class="contact-item" onclick="openContact(${u.user_id})">
-        <div class="avatar">${initials}</div>
-        <div class="contact-info">
-          <div class="contact-name">${u.display_name || 'ID ' + u.user_id}</div>
-          <div class="contact-meta">Был(а): ${seen} · ${u.language.toUpperCase()}</div>
-        </div>
-        <span class="badge ${cls}">${label}</span>
-      </div>`;
-    }).join('');
+    contactsCache = await get('/admin/users');
+    renderContacts();
   } catch(e) {
     el.innerHTML = `<div class="error">Ошибка: ${e.message}</div>`;
   }
+}
+
+function renderContacts() {
+  const el = document.getElementById('contacts-list');
+  if (!contactsCache) return;
+  const q = (document.getElementById('contacts-search')?.value || '').trim().toLowerCase();
+  const sort = document.getElementById('contacts-sort')?.value || 'recent';
+
+  let users = contactsCache.slice();
+  if (q) {
+    users = users.filter(u =>
+      (u.display_name || '').toLowerCase().includes(q) || String(u.user_id).includes(q));
+  }
+  if (sort === 'name') {
+    users.sort((a, b) => (a.display_name || String(a.user_id)).localeCompare(b.display_name || String(b.user_id), 'ru'));
+  } else if (sort === 'examples') {
+    users.sort((a, b) => (b.examples_count || 0) - (a.examples_count || 0));
+  } else {
+    users.sort((a, b) => (b.last_seen_at || '').localeCompare(a.last_seen_at || ''));
+  }
+
+  if (!users.length) {
+    el.innerHTML = `<div class="empty">${contactsCache.length ? 'Ничего не найдено' : 'Контакты не найдены'}</div>`;
+    return;
+  }
+
+  el.innerHTML = users.map(u => {
+    const initials = (u.display_name || String(u.user_id)).slice(0,2).toUpperCase();
+    const [pcls, plabel] = PERSONA_LABELS[u.persona_source] || ['badge-builtin','?'];
+    const seen = u.last_seen_at ? new Date(u.last_seen_at).toLocaleDateString('ru') : '—';
+    const [micon, mlabel] = REPLY_MODE_BADGE[u.reply_mode] || ['', ''];
+    const chips = [];
+    if (micon) chips.push(`<span class="chip">${micon} ${mlabel}</span>`);
+    if (u.examples_count) chips.push(`<span class="chip">🎯 ${u.examples_count}</span>`);
+    return `<div class="contact-item" onclick="openContact(${u.user_id})">
+      <div class="avatar">${initials}</div>
+      <div class="contact-info">
+        <div class="contact-name">${escHtml(u.display_name || 'ID ' + u.user_id)}</div>
+        <div class="contact-meta">Был(а): ${seen} · ${u.language.toUpperCase()}</div>
+        ${chips.length ? `<div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap">${chips.join('')}</div>` : ''}
+      </div>
+      <span class="badge ${pcls}">${plabel}</span>
+    </div>`;
+  }).join('');
 }
 
 async function openContact(userId) {
