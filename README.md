@@ -32,6 +32,7 @@ console, reply debouncing for rapid short messages, and a personal RAG knowledge
 - **Owner style learning (opt-in)** — the bot can learn the owner's real writing manner per contact and mimic it; learns only from genuine owner replies, never from AI-generated ones
 - **Few-shot examples** — per-contact curated (contact message → ideal reply) pairs, editable in the Mini App or saved straight from the Playground; injected into the prompt as a tone/format guide (up to 10 per contact)
 - **Business reply modes** — per-contact and global: suggest a draft, auto-reply, or stay silent
+- **Suggest Inbox** — in suggest mode, drafts are persisted and reviewable in the Mini App: edit inline, copy, save as a few-shot example, or dismiss (with a pending-count badge)
 - Daily greetings with timezone-aware calendar logic
 - Random conversation starters and scheduled proactive greetings
 - Per-user settings, i18n (`ru`, `en`), and admin controls
@@ -410,6 +411,7 @@ Restart the bot, then open your bot in Telegram and tap the Mini App button.
 - Phase 12 (done): per-contact openness dial (`open` / `neutral` / `reserved`) and opt-in owner writing-style learning
 - Phase 13 (done): semantic recall — per-message embeddings indexed in the background (lazy watermark backfill), retrieved by cosine similarity and injected between the summary and the live window; recall coverage shown in the Mini App **Статистика** tab
 - Phase 14 (done): per-contact curated few-shot examples — owner-picked ideal replies injected as a tone/format guide; editable in the contact card or saved directly from the Playground
+- Phase 15 (done): Mini App UX overhaul — Suggest Inbox (review/edit/copy/save/dismiss drafts), contacts search + sort + reply-mode/examples badges, contact detail split into sub-tabs (Персона/Факты/Эталоны/История), native Telegram toasts/haptics/BackButton
 
 ## Contributing
 
