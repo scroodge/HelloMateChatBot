@@ -189,6 +189,23 @@ contact_facts_meta = Table(
     Column("updated_at", Text, nullable=False),
 )
 
+conversation_message_embeddings = Table(
+    "conversation_message_embeddings",
+    metadata,
+    Column("message_id", Integer, primary_key=True, autoincrement=False),
+    Column("user_id", Integer, nullable=False),
+    Column("embedding", LargeBinary, nullable=False),
+    Index("idx_message_embeddings_user", "user_id"),
+)
+
+recall_index_meta = Table(
+    "recall_index_meta",
+    metadata,
+    Column("user_id", Integer, primary_key=True, autoincrement=False),
+    Column("watermark_id", Integer, nullable=False, default=0),
+    Column("updated_at", Text, nullable=False),
+)
+
 user_greeting_rules = Table(
     "user_greeting_rules",
     metadata,

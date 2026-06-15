@@ -154,6 +154,10 @@ async def _process_incoming_text(
     if isinstance(facts_service, ContactFactsService) and message_text and not sender_is_owner:
         facts_service.schedule_extraction(contact_user_id)
 
+    recall_service = context.bot_data.get("recall_service")
+    if recall_service is not None and message_text and not sender_is_owner:
+        recall_service.schedule_index(contact_user_id)
+
     # Owner replies feed style learning; refresh the profile after an owner message.
     style_service = context.bot_data.get("style_service")
     if isinstance(style_service, StyleService) and message_text and sender_is_owner:

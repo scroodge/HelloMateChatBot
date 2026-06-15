@@ -52,7 +52,11 @@ def build_persona_prompt(language: str, display_name: str | None = None) -> str:
         )
 
     if display_name:
-        prompt += f" Имя пользователя: {display_name}." if language == "ru" else f" User name: {display_name}."
+        prompt += (
+            f" Имя пользователя: {display_name}."
+            if language == "ru"
+            else f" User name: {display_name}."
+        )
     return prompt
 
 
@@ -109,6 +113,7 @@ class ReplyService:
         rag_service: RAGService | None = None,
         weather_service: WeatherService | None = None,
         facts_service: object | None = None,
+        recall_service: object | None = None,
         enabled: bool = False,
     ) -> None:
         self.llm_service = llm_service
@@ -119,6 +124,7 @@ class ReplyService:
         self.rag_service = rag_service
         self.weather_service = weather_service
         self.facts_service = facts_service
+        self.recall_service = recall_service
         self.enabled = enabled
 
     async def generate_reply(self, user_id: int, user_message: str) -> str | None:
@@ -213,13 +219,27 @@ class ReplyService:
             user_id, language, profile.display_name
         )
         if mood is not None:
-            system_prompt += f" Последнее настроение: {mood.mood}/5." if language == "ru" else f" Latest mood: {mood.mood}/5."
+            system_prompt += (
+                f" Последнее настроение: {mood.mood}/5."
+                if language == "ru"
+                else f" Latest mood: {mood.mood}/5."
+            )
         if summary is not None:
             system_prompt += (
                 f" Краткое резюме разговора: {summary.summary}."
                 if language == "ru"
                 else f" Conversation summary: {summary.summary}."
             )
+        if self.recall_service is not None:
+            recall_context = await self.recall_service.retrieve(
+                user_id, user_message, exclude_recent_n=self.memory_service.window_size
+            )
+            if recall_context:
+                system_prompt += (
+                    f" Из прошлых разговоров: {recall_context}."
+                    if language == "ru"
+                    else f" From past conversations: {recall_context}."
+                )
         if self.facts_service is not None:
             facts = self.facts_service.facts_as_dict(user_id)
             if facts:
@@ -230,7 +250,11 @@ class ReplyService:
                     else f" Known facts about this contact: {facts_str}."
                 )
         if rag_context:
-            system_prompt += f" Заметки: {rag_context}." if language == "ru" else f" Relevant notes: {rag_context}."
+            system_prompt += (
+                f" Заметки: {rag_context}."
+                if language == "ru"
+                else f" Relevant notes: {rag_context}."
+            )
         if weather_context:
             system_prompt += f" {weather_context}"
 
@@ -284,7 +308,9 @@ class ReplyService:
             rewritten = await self.llm_service.complete(retry_messages)
             if not _contains_cjk(rewritten):
                 return rewritten
-            logger.warning("LLM still returned CJK characters after rewrite for language %s", language)
+            logger.warning(
+                "LLM still returned CJK characters after rewrite for language %s", language
+            )
         except Exception:
             logger.exception("Failed to rewrite mixed-language reply for language %s", language)
         return reply

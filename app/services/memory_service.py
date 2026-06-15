@@ -94,9 +94,7 @@ class MemoryService:
 
         return self.repository.count_messages(user_id)
 
-    def messages_slice(
-        self, user_id: int, *, offset: int, limit: int
-    ) -> list[ConversationMessage]:
+    def messages_slice(self, user_id: int, *, offset: int, limit: int) -> list[ConversationMessage]:
         """Return messages oldest-first within [offset, offset+limit)."""
 
         return self.repository.list_messages_asc(user_id, offset=offset, limit=limit)
@@ -139,6 +137,32 @@ class MemoryService:
         """Remove the learned owner-style profile for a contact."""
 
         self.repository.delete_style_profile(user_id)
+
+    # ── Semantic recall (Phase 13) ────────────────────────────────────────────
+
+    def add_message_embedding(self, message_id: int, user_id: int, embedding: bytes) -> None:
+        self.repository.add_message_embedding(message_id, user_id, embedding)
+
+    def get_recall_watermark(self, user_id: int) -> int:
+        return self.repository.get_recall_watermark(user_id)
+
+    def set_recall_watermark(self, user_id: int, watermark_id: int) -> None:
+        self.repository.set_recall_watermark(user_id, watermark_id)
+
+    def list_unindexed_messages(
+        self, user_id: int, after_id: int, limit: int, min_chars: int
+    ) -> list[ConversationMessage]:
+        return self.repository.list_unindexed_messages(
+            user_id, after_id=after_id, limit=limit, min_chars=min_chars
+        )
+
+    def list_embeddings_for_user(self, user_id: int) -> list[tuple[int, bytes]]:
+        return self.repository.list_embeddings_for_user(user_id)
+
+    def list_messages_by_ids(
+        self, user_id: int, message_ids: set[int]
+    ) -> list[ConversationMessage]:
+        return self.repository.list_messages_by_ids(user_id, message_ids)
 
     def as_chat_messages(self, user_id: int) -> list[dict[str, str]]:
         """Return memory in LLM chat message format."""

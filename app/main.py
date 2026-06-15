@@ -65,6 +65,7 @@ from app.services.mood_service import MoodService
 from app.services.persona_service import PersonaService
 from app.services.profile_service import ProfileService
 from app.services.rag_service import RAGService
+from app.services.recall_service import RecallService
 from app.services.reply_debounce_service import ReplyDebounceService
 from app.services.reply_service import ReplyService
 from app.services.settings_service import SettingsService
@@ -138,6 +139,16 @@ def build_application(config: Config, database: Database):
         refresh_interval=config.facts_refresh_interval,
         enabled=config.facts_enabled and config.ai_replies_enabled,
     )
+    recall_service = RecallService(
+        memory_service=memory_service,
+        embedding_service=embedding_service,
+        window_size=config.memory_window_size,
+        top_k=config.recall_top_k,
+        min_chars=config.recall_min_chars,
+        min_score=config.recall_min_score,
+        backfill_batch=config.recall_backfill_batch,
+        enabled=config.recall_enabled and config.ai_replies_enabled,
+    )
     style_service = StyleService(
         memory_service=memory_service,
         llm_service=llm_service,
@@ -155,6 +166,7 @@ def build_application(config: Config, database: Database):
         rag_service=rag_service,
         weather_service=weather_service,
         facts_service=facts_service,
+        recall_service=recall_service,
         enabled=config.ai_replies_enabled,
     )
 
@@ -171,6 +183,7 @@ def build_application(config: Config, database: Database):
     application.bot_data["summary_service"] = summary_service
     application.bot_data["facts_service"] = facts_service
     application.bot_data["style_service"] = style_service
+    application.bot_data["recall_service"] = recall_service
     application.bot_data["reply_service"] = reply_service
     application.bot_data["persona_service"] = persona_service
     application.bot_data["event_service"] = event_service

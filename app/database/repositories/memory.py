@@ -9,8 +9,10 @@ from sqlalchemy import delete, func, insert, select
 
 from app.database.schema import (
     contact_style_profiles,
+    conversation_message_embeddings,
     conversation_messages,
     conversation_summaries,
+    recall_index_meta,
 )
 from app.database.util import upsert
 from app.models.memory import (
@@ -51,6 +53,22 @@ class MemoryRepository(Protocol):
     def set_style_profile(self, profile: ContactStyleProfile) -> ContactStyleProfile: ...
 
     def delete_style_profile(self, user_id: int) -> None: ...
+
+    def add_message_embedding(self, message_id: int, user_id: int, embedding: bytes) -> None: ...
+
+    def get_recall_watermark(self, user_id: int) -> int: ...
+
+    def set_recall_watermark(self, user_id: int, watermark_id: int) -> None: ...
+
+    def list_unindexed_messages(
+        self, user_id: int, after_id: int, limit: int, min_chars: int
+    ) -> list[ConversationMessage]: ...
+
+    def list_embeddings_for_user(self, user_id: int) -> list[tuple[int, bytes]]: ...
+
+    def list_messages_by_ids(
+        self, user_id: int, message_ids: set[int]
+    ) -> list[ConversationMessage]: ...
 
 
 class MemoryRepositoryImpl:
@@ -207,9 +225,7 @@ class MemoryRepositoryImpl:
     def get_style_profile(self, user_id: int) -> ContactStyleProfile | None:
         with self._db.engine.connect() as connection:
             row = connection.execute(
-                select(contact_style_profiles).where(
-                    contact_style_profiles.c.user_id == user_id
-                )
+                select(contact_style_profiles).where(contact_style_profiles.c.user_id == user_id)
             ).first()
         if row is None:
             return None
@@ -239,7 +255,108 @@ class MemoryRepositoryImpl:
     def delete_style_profile(self, user_id: int) -> None:
         with self._db.engine.begin() as connection:
             connection.execute(
-                delete(contact_style_profiles).where(
-                    contact_style_profiles.c.user_id == user_id
-                )
+                delete(contact_style_profiles).where(contact_style_profiles.c.user_id == user_id)
             )
+
+    def add_message_embedding(self, message_id: int, user_id: int, embedding: bytes) -> None:
+        with self._db.engine.begin() as connection:
+            dialect = connection.engine.dialect.name
+            if dialect == "postgresql":
+                from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+                stmt = pg_insert(conversation_message_embeddings).values(
+                    message_id=message_id, user_id=user_id, embedding=embedding
+                )
+                stmt = stmt.on_conflict_do_nothing(index_elements=["message_id"])
+            else:
+                from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+
+                stmt = sqlite_insert(conversation_message_embeddings).values(
+                    message_id=message_id, user_id=user_id, embedding=embedding
+                )
+                stmt = stmt.on_conflict_do_nothing(index_elements=["message_id"])
+            connection.execute(stmt)
+
+    def get_recall_watermark(self, user_id: int) -> int:
+        with self._db.engine.connect() as connection:
+            row = connection.execute(
+                select(recall_index_meta.c.watermark_id).where(
+                    recall_index_meta.c.user_id == user_id
+                )
+            ).first()
+        return int(row.watermark_id) if row is not None else 0
+
+    def set_recall_watermark(self, user_id: int, watermark_id: int) -> None:
+        with self._db.engine.begin() as connection:
+            upsert(
+                connection,
+                recall_index_meta,
+                {
+                    "user_id": user_id,
+                    "watermark_id": watermark_id,
+                    "updated_at": datetime.now().isoformat(),
+                },
+                index_elements=["user_id"],
+                update_columns=["watermark_id", "updated_at"],
+            )
+
+    def list_unindexed_messages(
+        self, user_id: int, after_id: int, limit: int, min_chars: int
+    ) -> list[ConversationMessage]:
+        with self._db.engine.connect() as connection:
+            rows = connection.execute(
+                select(conversation_messages)
+                .where(
+                    conversation_messages.c.user_id == user_id,
+                    conversation_messages.c.id > after_id,
+                    conversation_messages.c.role == "user",
+                    func.length(conversation_messages.c.content) >= min_chars,
+                )
+                .order_by(conversation_messages.c.id.asc())
+                .limit(limit)
+            ).all()
+        return [
+            ConversationMessage(
+                id=int(row.id),
+                user_id=int(row.user_id),
+                role=row.role,
+                content=row.content,
+                created_at=datetime.fromisoformat(row.created_at),
+                authored_by=getattr(row, "authored_by", None),
+            )
+            for row in rows
+        ]
+
+    def list_embeddings_for_user(self, user_id: int) -> list[tuple[int, bytes]]:
+        with self._db.engine.connect() as connection:
+            rows = connection.execute(
+                select(
+                    conversation_message_embeddings.c.message_id,
+                    conversation_message_embeddings.c.embedding,
+                ).where(conversation_message_embeddings.c.user_id == user_id)
+            ).all()
+        return [(int(row.message_id), row.embedding) for row in rows]
+
+    def list_messages_by_ids(
+        self, user_id: int, message_ids: set[int]
+    ) -> list[ConversationMessage]:
+        if not message_ids:
+            return []
+        with self._db.engine.connect() as connection:
+            rows = connection.execute(
+                select(conversation_messages).where(
+                    conversation_messages.c.user_id == user_id,
+                    conversation_messages.c.id.in_(message_ids),
+                )
+            ).all()
+        return [
+            ConversationMessage(
+                id=int(row.id),
+                user_id=int(row.user_id),
+                role=row.role,
+                content=row.content,
+                created_at=datetime.fromisoformat(row.created_at),
+                authored_by=getattr(row, "authored_by", None),
+            )
+            for row in rows
+        ]

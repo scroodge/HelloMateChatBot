@@ -72,6 +72,11 @@ class Config:
     style_enabled: bool
     style_refresh_interval: int
     style_max_chars: int
+    recall_enabled: bool
+    recall_top_k: int
+    recall_min_chars: int
+    recall_min_score: float
+    recall_backfill_batch: int
 
     @classmethod
     def from_env(cls) -> Config:
@@ -157,6 +162,20 @@ class Config:
         if style_max_chars < 100:
             raise ConfigError("STYLE_MAX_CHARS must be >= 100.")
 
+        recall_enabled = _parse_bool(os.getenv("RECALL_ENABLED", "true"), default=True)
+        recall_top_k = int(os.getenv("RECALL_TOP_K", "3"))
+        if recall_top_k < 1:
+            raise ConfigError("RECALL_TOP_K must be >= 1.")
+        recall_min_chars = int(os.getenv("RECALL_MIN_CHARS", "15"))
+        if recall_min_chars < 1:
+            raise ConfigError("RECALL_MIN_CHARS must be >= 1.")
+        recall_min_score = float(os.getenv("RECALL_MIN_SCORE", "0.5"))
+        if not 0.0 <= recall_min_score <= 1.0:
+            raise ConfigError("RECALL_MIN_SCORE must be between 0.0 and 1.0.")
+        recall_backfill_batch = int(os.getenv("RECALL_BACKFILL_BATCH", "50"))
+        if recall_backfill_batch < 1:
+            raise ConfigError("RECALL_BACKFILL_BATCH must be >= 1.")
+
         return cls(
             bot_token=bot_token,
             timezone=timezone,
@@ -196,4 +215,9 @@ class Config:
             style_enabled=style_enabled,
             style_refresh_interval=style_refresh_interval,
             style_max_chars=style_max_chars,
+            recall_enabled=recall_enabled,
+            recall_top_k=recall_top_k,
+            recall_min_chars=recall_min_chars,
+            recall_min_score=recall_min_score,
+            recall_backfill_batch=recall_backfill_batch,
         )
