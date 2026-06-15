@@ -26,6 +26,7 @@ console, reply debouncing for rapid short messages, and a personal RAG knowledge
 - **Reply debounce** — waits for a quiet period, then answers once when a contact sends several short messages in a row
 - **Shared chat memory** — per-contact history includes both the contact's and the owner's messages in managed chats
 - **Rolling conversation summary** — older history is compressed into a running summary so context survives beyond the recent window
+- **Semantic recall** — every contact message is embedded and indexed; the most relevant past messages are retrieved by meaning and injected into the prompt, so the bot can recall things said weeks ago even if they fell out of both the window and the summary
 - **Per-contact durable facts** — the bot extracts and remembers stable facts about each contact (name, city, job, birthday, interests…) and injects them into the prompt
 - **Openness dial** — per-contact control of how much to disclose (`open` / `neutral` / `reserved`); applied last so it overrides persona and tone
 - **Owner style learning (opt-in)** — the bot can learn the owner's real writing manner per contact and mimic it; learns only from genuine owner replies, never from AI-generated ones
@@ -217,7 +218,7 @@ chmod +x update.sh
 | `LLM_PROVIDER` | `ollama` | `ollama` or `openai` |
 | `LLM_BASE_URL` | `http://localhost:11434` | LLM API base URL |
 | `LLM_MODEL` | `llama3.2` | Chat model name |
-| `LLM_EMBEDDING_MODEL` | `bge-m3:latest` | Embedding model for RAG (`/remember`) |
+| `LLM_EMBEDDING_MODEL` | `bge-m3:latest` | Embedding model for RAG (`/remember`) and semantic recall |
 | `LLM_API_KEY` | empty | API key for cloud provider |
 | `LLM_MAX_TOKENS` | `512` | Max response tokens |
 | `AI_REPLIES_ENABLED` | `false` | Enable AI replies after greeting |
@@ -240,6 +241,13 @@ chmod +x update.sh
 | `STYLE_ENABLED` | `true` | Enable owner writing-style learning (still opt-in per contact) |
 | `STYLE_REFRESH_INTERVAL` | `5` | Refresh the learned style after this many new owner messages |
 | `STYLE_MAX_CHARS` | `800` | Max length of the stored style profile |
+| `RECALL_ENABLED` | `true` | Enable semantic recall (embed + retrieve past messages by meaning) |
+| `RECALL_TOP_K` | `3` | Max past messages injected per reply |
+| `RECALL_MIN_CHARS` | `15` | Skip indexing messages shorter than this (too little signal) |
+| `RECALL_MIN_SCORE` | `0.5` | Cosine-similarity threshold (0-1); a hit must score at least this to be injected |
+| `RECALL_BACKFILL_BATCH` | `50` | Messages indexed per incoming message — controls how fast existing history is lazily backfilled |
+
+> All of `SUMMARY_*`, `FACTS_*`, `STYLE_*`, and `RECALL_*` only take effect when `AI_REPLIES_ENABLED=true`. Recall and RAG share `LLM_EMBEDDING_MODEL`, which must be available on your LLM provider.
 
 ## Commands
 
@@ -399,6 +407,7 @@ Restart the bot, then open your bot in Telegram and tap the Mini App button.
 - Phase 10 (done): rolling conversation summary for context beyond the recent window
 - Phase 11 (done): per-contact durable facts — LLM extraction, Mini App fact editor, prompt injection
 - Phase 12 (done): per-contact openness dial (`open` / `neutral` / `reserved`) and opt-in owner writing-style learning
+- Phase 13 (done): semantic recall — per-message embeddings indexed in the background (lazy watermark backfill), retrieved by cosine similarity and injected between the summary and the live window; recall coverage shown in the Mini App **Статистика** tab
 
 ## Contributing
 

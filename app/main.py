@@ -83,6 +83,10 @@ def configure_logging(log_level: str) -> None:
         format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
         level=getattr(logging, log_level, logging.INFO),
     )
+    # httpx logs the full request URL at INFO, which for Telegram includes the
+    # bot token (…/bot<TOKEN>/getUpdates). Silence it to WARNING so the token
+    # never lands in logs that might be shipped off the host.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 def build_application(config: Config, database: Database):
