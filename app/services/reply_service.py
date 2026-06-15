@@ -114,6 +114,7 @@ class ReplyService:
         weather_service: WeatherService | None = None,
         facts_service: object | None = None,
         recall_service: object | None = None,
+        examples_service: object | None = None,
         enabled: bool = False,
     ) -> None:
         self.llm_service = llm_service
@@ -125,6 +126,7 @@ class ReplyService:
         self.weather_service = weather_service
         self.facts_service = facts_service
         self.recall_service = recall_service
+        self.examples_service = examples_service
         self.enabled = enabled
 
     async def generate_reply(self, user_id: int, user_message: str) -> str | None:
@@ -271,6 +273,13 @@ class ReplyService:
                     if language == "ru"
                     else f" Mimic the owner's writing style: {style.profile}"
                 )
+
+        # Curated few-shot examples: owner-picked ideal replies. Placed before the
+        # openness directive so openness still has the final say on disclosure.
+        if self.examples_service is not None:
+            examples_block = self.examples_service.examples_block(user_id, language)
+            if examples_block:
+                system_prompt += examples_block
 
         # Openness directive goes LAST so it dominates the persona/tone above.
         system_prompt += _openness_directive(openness, language)

@@ -13,6 +13,7 @@ from app.api.routes import create_router
 from app.config import Config
 from app.database.db import Database
 from app.services.contact_facts_service import ContactFactsService
+from app.services.examples_service import ContactExamplesService
 from app.services.greeting_rules_service import GreetingRulesService
 from app.services.greeting_service import GreetingService
 from app.services.memory_service import MemoryService
@@ -73,6 +74,7 @@ def create_api_app(config: Config, database: Database) -> FastAPI:
         refresh_interval=config.facts_refresh_interval,
         enabled=config.facts_enabled and config.ai_replies_enabled,
     )
+    examples_service = ContactExamplesService(database.examples)
     reply_service = ReplyService(
         llm_service=llm_service,
         memory_service=memory_service,
@@ -82,6 +84,7 @@ def create_api_app(config: Config, database: Database) -> FastAPI:
         rag_service=rag_service,
         weather_service=weather_service,
         facts_service=facts_service,
+        examples_service=examples_service,
         enabled=config.ai_replies_enabled,
     )
 
@@ -113,6 +116,7 @@ def create_api_app(config: Config, database: Database) -> FastAPI:
             greeting_rules_service=greeting_rules_service,
             event_repository=database.events,
             facts_service=facts_service,
+            examples_service=examples_service,
             mini_app_dev=config.mini_app_dev,
             dev_user_id=dev_user_id,
         ),

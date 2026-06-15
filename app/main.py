@@ -56,6 +56,7 @@ from app.services.contact_facts_service import ContactFactsService
 from app.services.conversation_starter_service import ConversationStarterService
 from app.services.embedding_service import EmbeddingService
 from app.services.event_service import EventService
+from app.services.examples_service import ContactExamplesService
 from app.services.greeting_rules_service import GreetingRulesService
 from app.services.greeting_service import GreetingService
 from app.services.llm import LLMService
@@ -143,6 +144,7 @@ def build_application(config: Config, database: Database):
         refresh_interval=config.facts_refresh_interval,
         enabled=config.facts_enabled and config.ai_replies_enabled,
     )
+    examples_service = ContactExamplesService(database.examples)
     recall_service = RecallService(
         memory_service=memory_service,
         embedding_service=embedding_service,
@@ -171,6 +173,7 @@ def build_application(config: Config, database: Database):
         weather_service=weather_service,
         facts_service=facts_service,
         recall_service=recall_service,
+        examples_service=examples_service,
         enabled=config.ai_replies_enabled,
     )
 
@@ -188,6 +191,7 @@ def build_application(config: Config, database: Database):
     application.bot_data["facts_service"] = facts_service
     application.bot_data["style_service"] = style_service
     application.bot_data["recall_service"] = recall_service
+    application.bot_data["examples_service"] = examples_service
     application.bot_data["reply_service"] = reply_service
     application.bot_data["persona_service"] = persona_service
     application.bot_data["event_service"] = event_service

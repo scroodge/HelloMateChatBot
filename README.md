@@ -30,6 +30,7 @@ console, reply debouncing for rapid short messages, and a personal RAG knowledge
 - **Per-contact durable facts** — the bot extracts and remembers stable facts about each contact (name, city, job, birthday, interests…) and injects them into the prompt
 - **Openness dial** — per-contact control of how much to disclose (`open` / `neutral` / `reserved`); applied last so it overrides persona and tone
 - **Owner style learning (opt-in)** — the bot can learn the owner's real writing manner per contact and mimic it; learns only from genuine owner replies, never from AI-generated ones
+- **Few-shot examples** — per-contact curated (contact message → ideal reply) pairs, editable in the Mini App or saved straight from the Playground; injected into the prompt as a tone/format guide (up to 10 per contact)
 - **Business reply modes** — per-contact and global: suggest a draft, auto-reply, or stay silent
 - Daily greetings with timezone-aware calendar logic
 - Random conversation starters and scheduled proactive greetings
@@ -408,6 +409,7 @@ Restart the bot, then open your bot in Telegram and tap the Mini App button.
 - Phase 11 (done): per-contact durable facts — LLM extraction, Mini App fact editor, prompt injection
 - Phase 12 (done): per-contact openness dial (`open` / `neutral` / `reserved`) and opt-in owner writing-style learning
 - Phase 13 (done): semantic recall — per-message embeddings indexed in the background (lazy watermark backfill), retrieved by cosine similarity and injected between the summary and the live window; recall coverage shown in the Mini App **Статистика** tab
+- Phase 14 (done): per-contact curated few-shot examples — owner-picked ideal replies injected as a tone/format guide; editable in the contact card or saved directly from the Playground
 
 ## Contributing
 

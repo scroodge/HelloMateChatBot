@@ -43,13 +43,13 @@ user_settings = Table(
     Column("greeting_day", Integer, nullable=False, default=1),
     Column("persona_prompt", Text),
     # structured persona fields (slice 6A)
-    Column("persona_preset", Text),          # e.g. "friend", "family", "mentor"
-    Column("persona_relationship", Text),    # free-text e.g. "older brother"
-    Column("persona_tone", Text),            # e.g. "warm", "formal", "playful"
-    Column("persona_topics", Text),          # JSON list of allowed topics
-    Column("persona_boundaries", Text),      # JSON list of forbidden topics
-    Column("business_reply_mode", Text),     # "auto" | "suggest" | "off" | NULL=inherit global
-    Column("openness", Text),                # "open" | "neutral" | "reserved" | NULL=inherit global
+    Column("persona_preset", Text),  # e.g. "friend", "family", "mentor"
+    Column("persona_relationship", Text),  # free-text e.g. "older brother"
+    Column("persona_tone", Text),  # e.g. "warm", "formal", "playful"
+    Column("persona_topics", Text),  # JSON list of allowed topics
+    Column("persona_boundaries", Text),  # JSON list of forbidden topics
+    Column("business_reply_mode", Text),  # "auto" | "suggest" | "off" | NULL=inherit global
+    Column("openness", Text),  # "open" | "neutral" | "reserved" | NULL=inherit global
     Column("style_learning_enabled", Boolean, nullable=False, default=False),
     Column("updated_at", Text),
 )
@@ -187,6 +187,19 @@ contact_facts_meta = Table(
     Column("user_id", Integer, primary_key=True, autoincrement=False),
     Column("last_message_count", Integer, nullable=False, default=0),
     Column("updated_at", Text, nullable=False),
+)
+
+contact_examples = Table(
+    "contact_examples",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("user_id", Integer, nullable=False),
+    # An ideal (contact message -> reply) pair, curated by the owner, injected
+    # into the prompt as a few-shot guide for tone/format.
+    Column("contact_message", Text, nullable=False),
+    Column("reply_text", Text, nullable=False),
+    Column("created_at", Text, nullable=False),
+    Index("idx_contact_examples_user", "user_id"),
 )
 
 conversation_message_embeddings = Table(

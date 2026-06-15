@@ -439,6 +439,23 @@
       </div>
     </div>
 
+    <!-- few-shot examples -->
+    <div class="card">
+      <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
+        <span>🎯 Эталонные ответы (few-shot)</span>
+        <button class="btn btn-sm btn-secondary" onclick="clearAllExamples()" style="width:auto;font-size:11px">Очистить</button>
+      </div>
+      <div style="font-size:11px;color:var(--hint);margin-bottom:8px">
+        Пары «сообщение контакта → идеальный ответ». Подмешиваются в промпт как образец тона и формата. До 10 шт.
+      </div>
+      <div id="detail-examples"><span class="empty">Примеров пока нет</span></div>
+      <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px">
+        <input type="text" id="example-msg-input" placeholder="Сообщение контакта">
+        <textarea id="example-reply-input" rows="2" placeholder="Идеальный ответ"></textarea>
+        <button class="btn btn-sm" onclick="saveExample()" style="width:auto">+ Добавить пример</button>
+      </div>
+    </div>
+
     <!-- recent messages -->
     <div class="card">
       <div class="card-title">Последние сообщения</div>
@@ -460,6 +477,8 @@
       <div class="card-title">Диалог</div>
       <div id="chat-box"></div>
       <div class="latency" id="latency-label"></div>
+      <button id="pg-save-example" class="btn btn-sm btn-secondary" onclick="savePlaygroundExample()"
+        style="display:none;width:auto;font-size:11px;margin-top:8px">🎯 Сохранить ответ в эталоны</button>
     </div>
     <div class="card">
       <div class="row">
@@ -673,6 +692,9 @@ async function openContact(userId) {
     // known facts
     renderFacts(u.facts || {});
 
+    // few-shot examples
+    renderExamples(u.examples || []);
+
     // recent messages
     const msgs = u.recent_messages || [];
     document.getElementById('detail-messages').innerHTML = msgs.length
@@ -881,6 +903,61 @@ async function clearAllFacts() {
   }
 }
 
+// ── Few-shot examples ─────────────────────────────────────────────────────────
+
+function renderExamples(examples) {
+  const el = document.getElementById('detail-examples');
+  if (!examples.length) {
+    el.innerHTML = '<span class="empty">Примеров пока нет — добавь идеальные ответы вручную</span>';
+    return;
+  }
+  el.innerHTML = examples.map(ex =>
+    `<div class="card" style="background:var(--bg);padding:8px;margin-bottom:6px">
+      <div style="font-size:11px;color:var(--hint)">Контакт:</div>
+      <div style="font-size:13px;margin-bottom:4px">${escHtml(ex.contact_message)}</div>
+      <div style="font-size:11px;color:var(--hint)">Ответ:</div>
+      <div style="font-size:13px">${escHtml(ex.reply_text)}</div>
+      <button class="btn btn-sm btn-secondary" onclick="deleteExample(${ex.id})"
+        style="width:auto;font-size:11px;margin-top:6px">Удалить</button>
+    </div>`
+  ).join('');
+}
+
+async function saveExample() {
+  if (!currentUserId) return;
+  const contact_message = document.getElementById('example-msg-input').value.trim();
+  const reply_text      = document.getElementById('example-reply-input').value.trim();
+  if (!contact_message || !reply_text) { tg.showAlert('Заполни оба поля'); return; }
+  try {
+    const examples = await post(`/admin/users/${currentUserId}/examples`, { contact_message, reply_text });
+    renderExamples(examples);
+    document.getElementById('example-msg-input').value = '';
+    document.getElementById('example-reply-input').value = '';
+  } catch(e) {
+    tg.showAlert('Ошибка: ' + e.message);
+  }
+}
+
+async function deleteExample(id) {
+  if (!currentUserId) return;
+  try {
+    const examples = await del(`/admin/users/${currentUserId}/examples/${id}`);
+    renderExamples(examples);
+  } catch(e) {
+    tg.showAlert('Ошибка: ' + e.message);
+  }
+}
+
+async function clearAllExamples() {
+  if (!currentUserId) return;
+  try {
+    await del(`/admin/users/${currentUserId}/examples`);
+    renderExamples([]);
+  } catch(e) {
+    tg.showAlert('Ошибка: ' + e.message);
+  }
+}
+
 // ── Learned style ────────────────────────────────────────────────────────────
 
 function renderStyle(profile) {
@@ -922,6 +999,19 @@ async function loadPlaygroundContacts() {
   } catch {}
 }
 
+let lastPlaygroundExchange = null;
+
+async function savePlaygroundExample() {
+  if (!lastPlaygroundExchange) return;
+  const { user_id, contact_message, reply_text } = lastPlaygroundExchange;
+  try {
+    await post(`/admin/users/${user_id}/examples`, { contact_message, reply_text });
+    tg.showAlert('Сохранено в эталоны ✓');
+  } catch(e) {
+    tg.showAlert('Ошибка: ' + e.message);
+  }
+}
+
 async function sendPlayground() {
   const userId = document.getElementById('pg-user-select').value;
   const msg    = document.getElementById('pg-message').value.trim();
@@ -942,6 +1032,10 @@ async function sendPlayground() {
     });
     box.innerHTML += `<div class="msg-bubble msg-assistant">${escHtml(res.reply)}</div>`;
     document.getElementById('latency-label').textContent = `${res.latency_ms} мс`;
+
+    // remember last exchange so it can be saved as a few-shot example
+    lastPlaygroundExchange = { user_id: parseInt(userId), contact_message: msg, reply_text: res.reply };
+    document.getElementById('pg-save-example').style.display = '';
 
     // show assembled system prompt first time or on change
     const sysParts = res.assembled_messages.filter(m => m.role === 'system');

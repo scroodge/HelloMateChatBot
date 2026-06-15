@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from app.api.auth import validate_init_data
 from app.database.repositories.events import EventRepository
 from app.services.contact_facts_service import ContactFactsService
+from app.services.examples_service import ContactExamplesService
 from app.services.greeting_rules_service import GreetingRulesService
 from app.services.greeting_service import GreetingService
 from app.services.memory_service import MemoryService
@@ -61,6 +62,11 @@ class ContactFactWriteRequest(BaseModel):
     value: str
 
 
+class ContactExampleWriteRequest(BaseModel):
+    contact_message: str
+    reply_text: str
+
+
 # ---------------------------------------------------------------------------
 # Router factory
 # ---------------------------------------------------------------------------
@@ -79,6 +85,7 @@ def create_admin_router(
     greeting_rules_service: GreetingRulesService,
     event_repository: EventRepository | None = None,
     facts_service: ContactFactsService | None = None,
+    examples_service: ContactExamplesService | None = None,
     *,
     mini_app_dev: bool = False,
     dev_user_id: int | None = None,
@@ -173,6 +180,19 @@ def create_admin_router(
 
         style = memory_service.get_style_profile(user_id)
 
+        examples = (
+            [
+                {
+                    "id": ex.id,
+                    "contact_message": ex.contact_message,
+                    "reply_text": ex.reply_text,
+                }
+                for ex in examples_service.list_examples(user_id)
+            ]
+            if examples_service is not None
+            else []
+        )
+
         return {
             "user_id": user_id,
             "display_name": profile.display_name if profile else None,
@@ -204,6 +224,7 @@ def create_admin_router(
                 for m in recent_messages
             ],
             "facts": contact_facts,
+            "examples": examples,
         }
 
     # -----------------------------------------------------------------------
@@ -380,6 +401,59 @@ def create_admin_router(
             raise HTTPException(status_code=503, detail="Facts service not enabled")
         facts_service.clear_facts(user_id)
         return {}
+
+    # -----------------------------------------------------------------------
+    # Few-shot examples (curated ideal replies)
+    # -----------------------------------------------------------------------
+
+    def _examples_payload(user_id: int) -> list[dict[str, Any]]:
+        assert examples_service is not None
+        return [
+            {
+                "id": ex.id,
+                "contact_message": ex.contact_message,
+                "reply_text": ex.reply_text,
+            }
+            for ex in examples_service.list_examples(user_id)
+        ]
+
+    @router.get("/users/{user_id}/examples")
+    async def get_examples(user_id: int, caller_id: int = AdminUser) -> list[dict[str, Any]]:
+        """Return curated few-shot examples for a contact."""
+        if examples_service is None:
+            return []
+        return _examples_payload(user_id)
+
+    @router.post("/users/{user_id}/examples")
+    async def add_example(
+        user_id: int, request: ContactExampleWriteRequest, caller_id: int = AdminUser
+    ) -> list[dict[str, Any]]:
+        """Add a curated (contact message -> ideal reply) example."""
+        if examples_service is None:
+            raise HTTPException(status_code=503, detail="Examples service not enabled")
+        try:
+            examples_service.add_example(user_id, request.contact_message, request.reply_text)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return _examples_payload(user_id)
+
+    @router.delete("/users/{user_id}/examples/{example_id}")
+    async def delete_example(
+        user_id: int, example_id: int, caller_id: int = AdminUser
+    ) -> list[dict[str, Any]]:
+        """Delete a single example for a contact."""
+        if examples_service is None:
+            raise HTTPException(status_code=503, detail="Examples service not enabled")
+        examples_service.delete_example(user_id, example_id)
+        return _examples_payload(user_id)
+
+    @router.delete("/users/{user_id}/examples")
+    async def clear_examples(user_id: int, caller_id: int = AdminUser) -> list[dict[str, Any]]:
+        """Delete all examples for a contact."""
+        if examples_service is None:
+            raise HTTPException(status_code=503, detail="Examples service not enabled")
+        examples_service.clear_examples(user_id)
+        return []
 
     # -----------------------------------------------------------------------
     # 12: Learned owner style

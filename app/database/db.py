@@ -16,9 +16,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 
 from app.database.repositories.business import BusinessRepositoryImpl
-from app.database.schema import metadata
 from app.database.repositories.documents import DocumentRepositoryImpl
 from app.database.repositories.events import EventRepositoryImpl
+from app.database.repositories.examples import ContactExamplesRepositoryImpl
 from app.database.repositories.facts import ContactFactsRepositoryImpl
 from app.database.repositories.greeting import GreetingRepositoryImpl
 from app.database.repositories.greeting_rules import GreetingRulesRepositoryImpl
@@ -26,6 +26,8 @@ from app.database.repositories.memory import MemoryRepositoryImpl
 from app.database.repositories.mood import MoodRepositoryImpl
 from app.database.repositories.profile import ProfileRepositoryImpl
 from app.database.repositories.settings import SettingsRepositoryImpl
+from app.database.schema import metadata
+
 
 class Database:
     """Owns the SQLAlchemy engine and exposes repository accessors."""
@@ -35,6 +37,7 @@ class Database:
         self._engine: Engine | None = None
         self.business = BusinessRepositoryImpl(self)
         self.events = EventRepositoryImpl(self)
+        self.examples = ContactExamplesRepositoryImpl(self)
         self.facts = ContactFactsRepositoryImpl(self)
         self.greetings = GreetingRepositoryImpl(self)
         self.greeting_rules = GreetingRulesRepositoryImpl(self)
@@ -75,9 +78,10 @@ class Database:
         This means shipping a new migration is sufficient — no manual
         ``alembic upgrade`` step required in production or Docker.
         """
-        from alembic import command as alembic_command
         from alembic.config import Config as AlembicConfig
         from alembic.runtime.migration import MigrationContext
+
+        from alembic import command as alembic_command
 
         alembic_cfg = AlembicConfig()
         alembic_cfg.set_main_option("script_location", "alembic")
