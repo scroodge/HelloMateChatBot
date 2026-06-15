@@ -477,8 +477,18 @@
       <div class="card-title">Диалог</div>
       <div id="chat-box"></div>
       <div class="latency" id="latency-label"></div>
-      <button id="pg-save-example" class="btn btn-sm btn-secondary" onclick="savePlaygroundExample()"
-        style="display:none;width:auto;font-size:11px;margin-top:8px">🎯 Сохранить ответ в эталоны</button>
+      <button id="pg-save-example" class="btn btn-sm btn-secondary" onclick="openExampleEditor()"
+        style="display:none;width:auto;font-size:11px;margin-top:8px">🎯 В эталоны (можно поправить)</button>
+      <div id="pg-example-editor" style="display:none;margin-top:8px;border-top:1px solid var(--sep,#eee);padding-top:8px">
+        <div style="font-size:11px;color:var(--hint);margin-bottom:4px">Сообщение контакта:</div>
+        <input type="text" id="pg-ex-msg" style="margin-bottom:6px">
+        <div style="font-size:11px;color:var(--hint);margin-bottom:4px">Идеальный ответ (отредактируй под себя):</div>
+        <textarea id="pg-ex-reply" rows="3" style="margin-bottom:6px"></textarea>
+        <div class="row">
+          <button class="btn btn-sm" onclick="confirmSaveExample()" style="width:auto">Сохранить в эталоны</button>
+          <button class="btn btn-sm btn-secondary" onclick="cancelExampleEditor()" style="width:auto">Отмена</button>
+        </div>
+      </div>
     </div>
     <div class="card">
       <div class="row">
@@ -1001,12 +1011,28 @@ async function loadPlaygroundContacts() {
 
 let lastPlaygroundExchange = null;
 
-async function savePlaygroundExample() {
+function openExampleEditor() {
   if (!lastPlaygroundExchange) return;
-  const { user_id, contact_message, reply_text } = lastPlaygroundExchange;
+  document.getElementById('pg-ex-msg').value   = lastPlaygroundExchange.contact_message;
+  document.getElementById('pg-ex-reply').value = lastPlaygroundExchange.reply_text;
+  document.getElementById('pg-example-editor').style.display = '';
+  document.getElementById('pg-save-example').style.display = 'none';
+}
+
+function cancelExampleEditor() {
+  document.getElementById('pg-example-editor').style.display = 'none';
+  document.getElementById('pg-save-example').style.display = '';
+}
+
+async function confirmSaveExample() {
+  if (!lastPlaygroundExchange) return;
+  const contact_message = document.getElementById('pg-ex-msg').value.trim();
+  const reply_text      = document.getElementById('pg-ex-reply').value.trim();
+  if (!contact_message || !reply_text) { tg.showAlert('Заполни оба поля'); return; }
   try {
-    await post(`/admin/users/${user_id}/examples`, { contact_message, reply_text });
+    await post(`/admin/users/${lastPlaygroundExchange.user_id}/examples`, { contact_message, reply_text });
     tg.showAlert('Сохранено в эталоны ✓');
+    cancelExampleEditor();
   } catch(e) {
     tg.showAlert('Ошибка: ' + e.message);
   }
@@ -1023,6 +1049,7 @@ async function sendPlayground() {
   box.innerHTML += `<div class="msg-bubble msg-user">${escHtml(msg)}</div>`;
   document.getElementById('pg-message').value = '';
   document.getElementById('latency-label').textContent = '...';
+  document.getElementById('pg-example-editor').style.display = 'none';
 
   try {
     const res = await post('/admin/persona/test', {
