@@ -30,6 +30,9 @@ class ContactExamplesRepository:
     def count_examples(self, user_id: int) -> int:
         raise NotImplementedError
 
+    def global_stats(self) -> tuple[int, int]:
+        raise NotImplementedError
+
 
 class ContactExamplesRepositoryImpl(ContactExamplesRepository):
     def __init__(self, db: Database) -> None:
@@ -95,3 +98,16 @@ class ContactExamplesRepositoryImpl(ContactExamplesRepository):
                     .where(contact_examples.c.user_id == user_id)
                 ).scalar_one()
             )
+
+    def global_stats(self) -> tuple[int, int]:
+        """Return (total examples, number of distinct contacts with examples)."""
+        with self._db.engine.connect() as conn:
+            total = int(
+                conn.execute(select(func.count()).select_from(contact_examples)).scalar_one()
+            )
+            contacts = int(
+                conn.execute(
+                    select(func.count(func.distinct(contact_examples.c.user_id)))
+                ).scalar_one()
+            )
+        return total, contacts

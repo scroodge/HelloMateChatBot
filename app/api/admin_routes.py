@@ -521,6 +521,11 @@ def create_admin_router(
         # Phase 13: semantic recall index coverage (all-time, not period-bound).
         recall_indexed_messages, recall_indexed_contacts = memory_service.recall_index_stats()
 
+        # Phase 14: curated few-shot examples coverage (all-time).
+        examples_total, examples_contacts = (
+            examples_service.global_stats() if examples_service is not None else (0, 0)
+        )
+
         return {
             "period_days": days,
             "since": since.isoformat(),
@@ -529,6 +534,10 @@ def create_admin_router(
             "recall": {
                 "indexed_messages": recall_indexed_messages,
                 "indexed_contacts": recall_indexed_contacts,
+            },
+            "examples": {
+                "total": examples_total,
+                "contacts": examples_contacts,
             },
         }
 

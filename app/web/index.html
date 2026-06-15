@@ -500,7 +500,7 @@
     </div>
     <div class="stat-grid" id="stat-totals"></div>
     <div class="card" id="stat-recall-card" style="display:none">
-      <div class="card-title">🧠 Семантическая память</div>
+      <div class="card-title">🧠 Память и обучение</div>
       <div id="stat-recall"></div>
     </div>
     <div class="card">
@@ -1080,12 +1080,20 @@ async function loadStats() {
     ).join('');
 
     const recall = s.recall;
+    const ex = s.examples;
     const recallCard = document.getElementById('stat-recall-card');
-    if (recall) {
+    if (recall || ex) {
       recallCard.style.display = '';
-      document.getElementById('stat-recall').innerHTML =
-        `<div class="contact-meta">📚 Проиндексировано сообщений: <b>${recall.indexed_messages}</b>` +
-        ` · 👥 контактов с памятью: <b>${recall.indexed_contacts}</b></div>`;
+      let html = '';
+      if (recall) {
+        html += `<div class="contact-meta">📚 Проиндексировано сообщений: <b>${recall.indexed_messages}</b>` +
+          ` · 👥 контактов с памятью: <b>${recall.indexed_contacts}</b></div>`;
+      }
+      if (ex) {
+        html += `<div class="contact-meta" style="margin-top:4px">🎯 Эталонных ответов: <b>${ex.total}</b>` +
+          ` · 👥 контактов с эталонами: <b>${ex.contacts}</b></div>`;
+      }
+      document.getElementById('stat-recall').innerHTML = html;
     } else {
       recallCard.style.display = 'none';
     }

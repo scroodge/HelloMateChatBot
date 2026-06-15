@@ -48,6 +48,10 @@ class ContactExamplesService:
     def clear_examples(self, user_id: int) -> None:
         self.repository.clear_examples(user_id)
 
+    def global_stats(self) -> tuple[int, int]:
+        """Return (total examples, number of contacts with examples)."""
+        return self.repository.global_stats()
+
     def examples_block(self, user_id: int, language: str) -> str:
         """Return a system-prompt block of few-shot examples, or '' if none."""
         if not self.enabled:
