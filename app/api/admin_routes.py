@@ -67,6 +67,7 @@ class ContactFactWriteRequest(BaseModel):
 class FactCategoryWriteRequest(BaseModel):
     key: str
     label: str
+    multi: bool = False
 
 
 class ContactExampleWriteRequest(BaseModel):
@@ -197,9 +198,7 @@ def create_admin_router(
                 boundaries_parsed = None
 
         contact_facts = (
-            {f.key: f.value for f in facts_service.get_facts(user_id)}
-            if facts_service is not None
-            else {}
+            facts_service.facts_structured(user_id) if facts_service is not None else {}
         )
 
         style = memory_service.get_style_profile(user_id)
@@ -392,35 +391,45 @@ def create_admin_router(
     # -----------------------------------------------------------------------
 
     @router.get("/users/{user_id}/facts")
-    async def get_facts(user_id: int, caller_id: int = AdminUser) -> dict[str, str]:
-        """Return all durable facts extracted for a contact."""
+    async def get_facts(user_id: int, caller_id: int = AdminUser) -> dict[str, Any]:
+        """Return all durable facts extracted for a contact (key -> {multi, values})."""
         if facts_service is None:
             return {}
-        return facts_service.facts_as_dict(user_id)
+        return facts_service.facts_structured(user_id)
 
     @router.put("/users/{user_id}/facts/{key}")
     async def set_fact(
         user_id: int, key: str, request: ContactFactWriteRequest, caller_id: int = AdminUser
-    ) -> dict[str, str]:
-        """Manually set or override a fact for a contact."""
+    ) -> dict[str, Any]:
+        """Set (single) or append (multi-valued) a fact for a contact."""
         if facts_service is None:
             raise HTTPException(status_code=503, detail="Facts service not enabled")
         try:
             facts_service.set_fact(user_id, key, request.value.strip())
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
-        return facts_service.facts_as_dict(user_id)
+        return facts_service.facts_structured(user_id)
+
+    @router.delete("/users/{user_id}/facts/{key}/value")
+    async def remove_fact_value(
+        user_id: int, key: str, value: str, caller_id: int = AdminUser
+    ) -> dict[str, Any]:
+        """Remove a single value from a multi-valued fact."""
+        if facts_service is None:
+            raise HTTPException(status_code=503, detail="Facts service not enabled")
+        facts_service.remove_fact_value(user_id, key, value)
+        return facts_service.facts_structured(user_id)
 
     @router.delete("/users/{user_id}/facts/{key}")
-    async def delete_fact(user_id: int, key: str, caller_id: int = AdminUser) -> dict[str, str]:
-        """Delete a single fact for a contact."""
+    async def delete_fact(user_id: int, key: str, caller_id: int = AdminUser) -> dict[str, Any]:
+        """Delete a fact (all values) for a contact."""
         if facts_service is None:
             raise HTTPException(status_code=503, detail="Facts service not enabled")
         facts_service.delete_fact(user_id, key)
-        return facts_service.facts_as_dict(user_id)
+        return facts_service.facts_structured(user_id)
 
     @router.delete("/users/{user_id}/facts")
-    async def clear_facts(user_id: int, caller_id: int = AdminUser) -> dict[str, str]:
+    async def clear_facts(user_id: int, caller_id: int = AdminUser) -> dict[str, Any]:
         """Delete all facts for a contact."""
         if facts_service is None:
             raise HTTPException(status_code=503, detail="Facts service not enabled")
@@ -542,7 +551,7 @@ def create_admin_router(
     # -----------------------------------------------------------------------
 
     @router.get("/fact-categories")
-    async def list_fact_categories(caller_id: int = AdminUser) -> list[dict[str, str]]:
+    async def list_fact_categories(caller_id: int = AdminUser) -> list[dict[str, Any]]:
         """Return all owner-defined custom fact categories."""
         if fact_categories_service is None:
             return []
@@ -551,18 +560,18 @@ def create_admin_router(
     @router.post("/fact-categories")
     async def add_fact_category(
         request: FactCategoryWriteRequest, caller_id: int = AdminUser
-    ) -> list[dict[str, str]]:
+    ) -> list[dict[str, Any]]:
         """Add a custom fact category (global, LLM will auto-extract it)."""
         if fact_categories_service is None:
             raise HTTPException(status_code=503, detail="Fact categories service not enabled")
         try:
-            fact_categories_service.add_category(request.key, request.label)
+            fact_categories_service.add_category(request.key, request.label, request.multi)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         return fact_categories_service.list_categories()
 
     @router.delete("/fact-categories/{key}")
-    async def delete_fact_category(key: str, caller_id: int = AdminUser) -> list[dict[str, str]]:
+    async def delete_fact_category(key: str, caller_id: int = AdminUser) -> list[dict[str, Any]]:
         """Delete a custom fact category (does not delete already-stored facts)."""
         if fact_categories_service is None:
             raise HTTPException(status_code=503, detail="Fact categories service not enabled")

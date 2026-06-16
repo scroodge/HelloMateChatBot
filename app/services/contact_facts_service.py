@@ -39,7 +39,55 @@ KNOWN_KEYS = {
     "notes",
 }
 
+# Built-in keys that hold a list of values (the LLM appends, the owner manages
+# items individually). Atomic keys (name, birthday, …) stay single-valued.
+MULTI_BUILTIN_KEYS = {"interests", "family"}
+
+# Hard cap on how many values a multi-valued fact may accumulate.
+MAX_FACT_VALUES = 15
+
 _JSON_FENCE = re.compile(r"```(?:json)?\s*(.*?)```", re.DOTALL)
+
+
+def _decode_values(raw: str) -> list[str]:
+    """Decode a stored multi-valued fact into a list.
+
+    New rows store a JSON array; legacy rows store a comma-separated string.
+    Both are handled so existing data keeps working after the upgrade.
+    """
+    raw = (raw or "").strip()
+    if not raw:
+        return []
+    if raw.startswith("["):
+        try:
+            data = json.loads(raw)
+            if isinstance(data, list):
+                return [str(v).strip() for v in data if str(v).strip()]
+        except json.JSONDecodeError:
+            pass
+    # Legacy / plain: split on commas.
+    return [part.strip() for part in raw.split(",") if part.strip()]
+
+
+def _encode_values(values: list[str]) -> str:
+    """Encode a list of values for storage as a JSON array string."""
+    return json.dumps(values, ensure_ascii=False)
+
+
+def _dedup(values: list[str]) -> list[str]:
+    """Drop case-insensitive duplicates, preserving first-seen order."""
+    seen: set[str] = set()
+    out: list[str] = []
+    for v in values:
+        v = v.strip()
+        if not v:
+            continue
+        low = v.casefold()
+        if low in seen:
+            continue
+        seen.add(low)
+        out.append(v)
+    return out
 
 
 def _parse_facts_json(raw: str, allowed_keys: frozenset[str]) -> dict[str, str]:
@@ -75,11 +123,14 @@ def _build_extraction_messages(
     existing_facts: dict[str, str],
     language: str,
     extra_keys: list[tuple[str, str]] | None = None,
+    multi_keys: set[str] | None = None,
 ) -> list[dict[str, str]]:
     """Build LLM prompt for fact extraction.
 
     extra_keys: list of (key, label) for owner-defined custom categories.
     They are appended to keys_hint so the LLM knows to extract them too.
+    multi_keys: keys that may hold several values (the model should return them
+    comma-separated within the string value for that key).
     """
 
     builtin_hint = (
@@ -92,11 +143,25 @@ def _build_extraction_messages(
     else:
         keys_hint = builtin_hint
 
+    multi_list = sorted(multi_keys) if multi_keys else []
+    multi_hint_ru = (
+        f" Ключи {', '.join(multi_list)} могут содержать несколько значений — "
+        "перечисли их через запятую в одной строке."
+        if multi_list
+        else ""
+    )
+    multi_hint_en = (
+        f" Keys {', '.join(multi_list)} may hold several values — "
+        "list them comma-separated in a single string."
+        if multi_list
+        else ""
+    )
+
     if language == "ru":
         system = (
             "Ты извлекаешь устойчивые факты о собеседнике из переписки. "
             "Возвращай ТОЛЬКО валидный JSON-объект без пояснений. "
-            f"Допустимые ключи: {keys_hint}. "
+            f"Допустимые ключи: {keys_hint}.{multi_hint_ru} "
             "Включай только факты, которые явно следуют из переписки. "
             "Не придумывай. Значения — короткие строки на русском. "
             "Если факт уже известен и не изменился — повтори его. "
@@ -110,7 +175,7 @@ def _build_extraction_messages(
         system = (
             "You extract stable personal facts about the contact from a chat. "
             "Return ONLY a valid JSON object with no explanation. "
-            f"Allowed keys: {keys_hint}. "
+            f"Allowed keys: {keys_hint}.{multi_hint_en} "
             "Only include facts clearly stated in the conversation. "
             "Do not invent. Values should be short strings. "
             "If a fact is already known and unchanged — repeat it. "
@@ -168,6 +233,14 @@ class ContactFactsService:
         custom = self.categories_service.list_keys() if self.categories_service else set()
         return frozenset(KNOWN_KEYS | custom)
 
+    def _multi_keys(self) -> frozenset[str]:
+        """Return all keys (built-in + custom) that hold a list of values."""
+        custom = self.categories_service.multi_keys() if self.categories_service else set()
+        return frozenset(MULTI_BUILTIN_KEYS | custom)
+
+    def is_multi(self, key: str) -> bool:
+        return key in self._multi_keys()
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -176,13 +249,77 @@ class ContactFactsService:
         return self.repository.get_facts(user_id)
 
     def facts_as_dict(self, user_id: int) -> dict[str, str]:
-        return {f.key: f.value for f in self.get_facts(user_id)}
+        """Facts as flat key->string, with multi-valued lists joined by ', '.
+
+        Used for prompt injection where a readable single line per key is wanted.
+        """
+        multi = self._multi_keys()
+        out: dict[str, str] = {}
+        for f in self.get_facts(user_id):
+            if f.key in multi:
+                out[f.key] = ", ".join(_decode_values(f.value))
+            else:
+                out[f.key] = f.value
+        return out
+
+    def facts_structured(self, user_id: int) -> dict[str, dict[str, object]]:
+        """Facts as key -> {multi, values}. Used by the API/UI to render chips."""
+        multi = self._multi_keys()
+        out: dict[str, dict[str, object]] = {}
+        for f in self.get_facts(user_id):
+            if f.key in multi:
+                out[f.key] = {"multi": True, "values": _decode_values(f.value)}
+            else:
+                out[f.key] = {"multi": False, "values": [f.value]}
+        return out
 
     def set_fact(self, user_id: int, key: str, value: str) -> None:
+        """Set (single) or append (multi) a fact value.
+
+        For multi keys, value may itself be comma-separated; all items are merged
+        into the existing list (deduped, capped). For single keys the value
+        overwrites.
+        """
         allowed = self._allowed_keys()
         if key not in allowed:
             raise ValueError(f"Unknown fact key: {key!r}. Allowed: {sorted(allowed)}")
-        self.repository.set_fact(user_id, key, value)
+
+        if key in self._multi_keys():
+            existing = self._current_values(user_id, key)
+            if "," in value or value.strip().startswith("["):
+                incoming = _decode_values(value)
+            else:
+                incoming = [value]
+            merged = _dedup(existing + incoming)[:MAX_FACT_VALUES]
+            if merged:
+                self.repository.set_fact(user_id, key, _encode_values(merged))
+            else:
+                self.repository.delete_fact(user_id, key)
+        else:
+            self.repository.set_fact(user_id, key, value)
+
+    def remove_fact_value(self, user_id: int, key: str, value: str) -> None:
+        """Remove a single value from a multi-valued fact (no-op for single keys).
+
+        If the last value is removed, the whole key is deleted.
+        """
+        if key not in self._multi_keys():
+            # Single-valued: removing "the value" just deletes the fact.
+            self.repository.delete_fact(user_id, key)
+            return
+        remaining = [
+            v for v in self._current_values(user_id, key) if v.casefold() != value.casefold()
+        ]
+        if remaining:
+            self.repository.set_fact(user_id, key, _encode_values(remaining))
+        else:
+            self.repository.delete_fact(user_id, key)
+
+    def _current_values(self, user_id: int, key: str) -> list[str]:
+        for f in self.get_facts(user_id):
+            if f.key == key:
+                return _decode_values(f.value)
+        return []
 
     def delete_fact(self, user_id: int, key: str) -> None:
         self.repository.delete_fact(user_id, key)
@@ -233,23 +370,25 @@ class ContactFactsService:
         existing = self.facts_as_dict(user_id)
         language = self.settings_service.get_language(user_id)
         extra_categories = (
-            [(c["key"], c["label"]) for c in self.categories_service.list_categories()]
+            [(str(c["key"]), str(c["label"])) for c in self.categories_service.list_categories()]
             if self.categories_service
             else None
         )
         allowed_keys = self._allowed_keys()
+        multi_keys = set(self._multi_keys())
         prompt = _build_extraction_messages(
             [{"role": m.role, "content": m.content} for m in recent],
             existing,
             language,
             extra_keys=extra_categories,
+            multi_keys=multi_keys,
         )
         raw = (await self.llm_service.complete(prompt)).strip()
         new_facts = _parse_facts_json(raw, allowed_keys)
 
-        # Merge: update known keys, never delete previously extracted ones
+        # Merge: set_fact overwrites single keys and appends+dedups multi keys.
         for key, value in new_facts.items():
-            self.repository.set_fact(user_id, key, value)
+            self.set_fact(user_id, key, value)
 
         self.repository.set_meta(user_id, total)
         logger.info(

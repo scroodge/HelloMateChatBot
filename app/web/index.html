@@ -666,6 +666,10 @@
           <input type="text" id="fc-key-input" placeholder="ключ (напр. pet_name)" style="flex:1">
           <input type="text" id="fc-label-input" placeholder="Подпись (напр. Кличка питомца)" style="flex:2">
         </div>
+        <label class="toggle-row" style="font-size:13px">
+          <span class="toggle-label">Многозначная (список значений) — напр. «любимое», «увлечения»</span>
+          <label class="toggle"><input type="checkbox" id="fc-multi-input"><span class="slider"></span></label>
+        </label>
         <button class="btn btn-sm" onclick="addFactCategory()" style="width:auto">+ Добавить категорию</button>
       </div>
     </div>
@@ -1078,21 +1082,46 @@ const FACT_LABELS = {
   family: 'Семья', language: 'Язык', notes: 'Заметки',
 };
 
+let _factDelBound = false;
 function renderFacts(facts) {
   const el = document.getElementById('detail-facts');
-  const entries = Object.entries(facts);
+  // Delegated delete handler (bound once; container persists across re-renders).
+  if (!_factDelBound) {
+    el.addEventListener('click', (e) => {
+      const t = e.target.closest('.fact-del');
+      if (!t) return;
+      if (t.dataset.multi === '1') deleteFactValue(t.dataset.key, t.dataset.val);
+      else deleteFact(t.dataset.key);
+    });
+    _factDelBound = true;
+  }
+  const entries = Object.entries(facts || {});
   if (!entries.length) {
     el.innerHTML = '<span class="empty">Фактов пока нет — бот накопит их автоматически</span>';
     return;
   }
-  el.innerHTML = entries.map(([k, v]) =>
-    `<div class="tag-row" style="margin-bottom:6px;align-items:center">
-      <span style="font-size:11px;color:var(--hint);width:90px;flex-shrink:0">${FACT_LABELS[k] || k}</span>
-      <span class="tag" style="flex:1;max-width:none;cursor:default">${escHtml(v)}
-        <span class="tag-del" onclick="deleteFact('${escHtml(k)}')">×</span>
-      </span>
-    </div>`
-  ).join('');
+  el.innerHTML = entries.map(([k, f]) => {
+    const label  = FACT_LABELS[k] || k;
+    const multi  = f && f.multi;
+    const values = (f && f.values) || [];
+    let body;
+    if (multi) {
+      const chips = values.map(v =>
+        `<span class="tag" style="cursor:default">${escHtml(v)}
+          <span class="tag-del fact-del" data-key="${escHtml(k)}" data-multi="1" data-val="${escHtml(v)}">×</span>
+        </span>`).join(' ');
+      body = `<span style="flex:1;display:flex;flex-wrap:wrap;gap:4px">${chips}</span>`;
+    } else {
+      const v = values[0] || '';
+      body = `<span class="tag" style="flex:1;max-width:none;cursor:default">${escHtml(v)}
+        <span class="tag-del fact-del" data-key="${escHtml(k)}" data-multi="0">×</span>
+      </span>`;
+    }
+    return `<div class="tag-row" style="margin-bottom:6px;align-items:flex-start">
+      <span style="font-size:11px;color:var(--hint);width:90px;flex-shrink:0;padding-top:4px">${label}</span>
+      ${body}
+    </div>`;
+  }).join('');
 }
 
 async function saveFact() {
@@ -1112,7 +1141,17 @@ async function saveFact() {
 async function deleteFact(key) {
   if (!currentUserId) return;
   try {
-    const facts = await del(`/admin/users/${currentUserId}/facts/${key}`);
+    const facts = await del(`/admin/users/${currentUserId}/facts/${encodeURIComponent(key)}`);
+    renderFacts(facts);
+  } catch(e) {
+    tg.showAlert('Ошибка: ' + e.message);
+  }
+}
+
+async function deleteFactValue(key, value) {
+  if (!currentUserId) return;
+  try {
+    const facts = await del(`/admin/users/${currentUserId}/facts/${encodeURIComponent(key)}/value?value=${encodeURIComponent(value)}`);
     renderFacts(facts);
   } catch(e) {
     tg.showAlert('Ошибка: ' + e.message);
@@ -1525,7 +1564,7 @@ async function loadFactCategories() {
     } else {
       el.innerHTML = cats.map(c =>
         `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-          <span style="font-size:13px"><b>${escHtml(c.key)}</b> — ${escHtml(c.label)}</span>
+          <span style="font-size:13px"><b>${escHtml(c.key)}</b> — ${escHtml(c.label)}${c.multi ? ' <span class="chip">🔢 список</span>' : ''}</span>
           <button class="btn btn-sm btn-secondary" onclick="deleteFactCategory('${escHtml(c.key)}')"
             style="width:auto;font-size:11px;flex-shrink:0">✕</button>
         </div>`
@@ -1540,11 +1579,13 @@ async function loadFactCategories() {
 async function addFactCategory() {
   const key   = document.getElementById('fc-key-input').value.trim();
   const label = document.getElementById('fc-label-input').value.trim();
+  const multi = document.getElementById('fc-multi-input').checked;
   if (!key || !label) { tg.showAlert?.('Заполни ключ и подпись'); return; }
   try {
-    await post('/admin/fact-categories', { key, label });
+    await post('/admin/fact-categories', { key, label, multi });
     document.getElementById('fc-key-input').value = '';
     document.getElementById('fc-label-input').value = '';
+    document.getElementById('fc-multi-input').checked = false;
     toast('Категория добавлена');
     loadFactCategories();
   } catch(e) {

@@ -240,6 +240,9 @@ fact_categories = Table(
     metadata,
     Column("key", Text, primary_key=True),
     Column("label", Text, nullable=False),
+    # multi=True: the category holds a list of values (e.g. "любимое", interests);
+    # the LLM appends to it and the owner manages items individually.
+    Column("multi", Boolean, nullable=False, default=False),
     Column("created_at", Text, nullable=False),
 )
 

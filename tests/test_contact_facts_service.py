@@ -230,3 +230,139 @@ def test_manual_set_and_delete(tmp_path) -> None:
         assert svc.facts_as_dict(1) == {"name": "Вася"}
         svc.clear_facts(1)
         assert svc.facts_as_dict(1) == {}
+
+
+# ---------------------------------------------------------------------------
+# Multi-valued facts
+# ---------------------------------------------------------------------------
+
+
+def test_multi_builtin_appends(tmp_path) -> None:
+    """interests is a built-in multi key — set_fact appends, not overwrites."""
+    svc, memory, llm, db = _make(tmp_path)
+    with db:
+        svc.set_fact(1, "interests", "футбол")
+        svc.set_fact(1, "interests", "музыка")
+        structured = svc.facts_structured(1)
+        assert structured["interests"]["multi"] is True
+        assert structured["interests"]["values"] == ["футбол", "музыка"]
+
+
+def test_multi_dedup_case_insensitive(tmp_path) -> None:
+    svc, memory, llm, db = _make(tmp_path)
+    with db:
+        svc.set_fact(1, "interests", "Футбол")
+        svc.set_fact(1, "interests", "футбол")
+        assert svc.facts_structured(1)["interests"]["values"] == ["Футбол"]
+
+
+def test_multi_comma_split(tmp_path) -> None:
+    svc, memory, llm, db = _make(tmp_path)
+    with db:
+        svc.set_fact(1, "interests", "футбол, музыка, кино")
+        assert svc.facts_structured(1)["interests"]["values"] == ["футбол", "музыка", "кино"]
+
+
+def test_facts_as_dict_joins_multi(tmp_path) -> None:
+    svc, memory, llm, db = _make(tmp_path)
+    with db:
+        svc.set_fact(1, "interests", "футбол")
+        svc.set_fact(1, "interests", "музыка")
+        svc.set_fact(1, "name", "Катя")
+        flat = svc.facts_as_dict(1)
+        assert flat["interests"] == "футбол, музыка"
+        assert flat["name"] == "Катя"
+
+
+def test_facts_structured_single(tmp_path) -> None:
+    svc, memory, llm, db = _make(tmp_path)
+    with db:
+        svc.set_fact(1, "name", "Катя")
+        s = svc.facts_structured(1)
+        assert s["name"] == {"multi": False, "values": ["Катя"]}
+
+
+def test_remove_fact_value(tmp_path) -> None:
+    svc, memory, llm, db = _make(tmp_path)
+    with db:
+        svc.set_fact(1, "interests", "футбол, музыка, кино")
+        svc.remove_fact_value(1, "interests", "музыка")
+        assert svc.facts_structured(1)["interests"]["values"] == ["футбол", "кино"]
+
+
+def test_remove_last_value_deletes_key(tmp_path) -> None:
+    svc, memory, llm, db = _make(tmp_path)
+    with db:
+        svc.set_fact(1, "interests", "футбол")
+        svc.remove_fact_value(1, "interests", "футбол")
+        assert "interests" not in svc.facts_structured(1)
+
+
+def test_multi_value_cap(tmp_path) -> None:
+    from app.services.contact_facts_service import MAX_FACT_VALUES
+
+    svc, memory, llm, db = _make(tmp_path)
+    with db:
+        for i in range(MAX_FACT_VALUES + 5):
+            svc.set_fact(1, "interests", f"item{i}")
+        assert len(svc.facts_structured(1)["interests"]["values"]) == MAX_FACT_VALUES
+
+
+def test_custom_multi_category(tmp_path) -> None:
+    from app.services.fact_categories_service import FactCategoriesService
+
+    db = Database(f"sqlite:///{tmp_path / 'facts.db'}")
+    db.open()
+    with db:
+        cats = FactCategoriesService(db.fact_categories)
+        cats.add_category("favorite", "Любимое", multi=True)
+        memory = MemoryService(db.memory, window_size=10)
+        settings = SettingsService(db.settings, "ru", 9)
+        svc = ContactFactsService(
+            repository=db.facts,
+            memory_service=memory,
+            llm_service=MagicMock(),
+            settings_service=settings,
+            refresh_interval=5,
+            enabled=True,
+            categories_service=cats,
+        )
+        svc.set_fact(1, "favorite", "суши")
+        svc.set_fact(1, "favorite", "Матрица")
+        assert svc.facts_structured(1)["favorite"]["values"] == ["суши", "Матрица"]
+
+
+@pytest.mark.asyncio
+async def test_extraction_appends_multi(tmp_path) -> None:
+    """Across extractions, a multi key accumulates rather than overwrites."""
+    db = Database(f"sqlite:///{tmp_path / 'facts.db'}")
+    db.open()
+    memory = MemoryService(db.memory, window_size=10)
+    settings = SettingsService(db.settings, "ru", 9)
+
+    call_count = 0
+    returns = [{"interests": "футбол"}, {"interests": "музыка"}]
+
+    async def _complete(messages):
+        nonlocal call_count
+        r = returns[min(call_count, len(returns) - 1)]
+        call_count += 1
+        return json.dumps(r, ensure_ascii=False)
+
+    llm = MagicMock()
+    llm.complete = _complete
+
+    svc = ContactFactsService(
+        repository=db.facts,
+        memory_service=memory,
+        llm_service=llm,
+        settings_service=settings,
+        refresh_interval=3,
+        enabled=True,
+    )
+    with db:
+        _fill(memory, 1, 3)
+        await svc.maybe_extract(1)
+        _fill(memory, 1, 3)
+        await svc.maybe_extract(1)
+        assert svc.facts_structured(1)["interests"]["values"] == ["футбол", "музыка"]
