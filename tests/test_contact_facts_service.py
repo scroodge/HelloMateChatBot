@@ -315,7 +315,7 @@ def test_custom_multi_category(tmp_path) -> None:
     db.open()
     with db:
         cats = FactCategoriesService(db.fact_categories)
-        cats.add_category("favorite", "Любимое", multi=True)
+        fav_key = cats.add_category("Любимое", multi=True)
         memory = MemoryService(db.memory, window_size=10)
         settings = SettingsService(db.settings, "ru", 9)
         svc = ContactFactsService(
@@ -327,9 +327,9 @@ def test_custom_multi_category(tmp_path) -> None:
             enabled=True,
             categories_service=cats,
         )
-        svc.set_fact(1, "favorite", "суши")
-        svc.set_fact(1, "favorite", "Матрица")
-        assert svc.facts_structured(1)["favorite"]["values"] == ["суши", "Матрица"]
+        svc.set_fact(1, fav_key, "суши")
+        svc.set_fact(1, fav_key, "Матрица")
+        assert svc.facts_structured(1)[fav_key]["values"] == ["суши", "Матрица"]
 
 
 @pytest.mark.asyncio

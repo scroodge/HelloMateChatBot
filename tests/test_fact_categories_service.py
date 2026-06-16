@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from app.database.db import Database
-from app.services.fact_categories_service import FactCategoriesService
+from app.services.fact_categories_service import FactCategoriesService, _slugify
 
 
 def _make_service(tmp_path) -> tuple[FactCategoriesService, Database]:
@@ -14,66 +14,109 @@ def _make_service(tmp_path) -> tuple[FactCategoriesService, Database]:
     return FactCategoriesService(db.fact_categories), db
 
 
-def test_add_and_list(tmp_path) -> None:
+# ── Slug generation ────────────────────────────────────────────────────────────
+
+
+def test_slugify_cyrillic() -> None:
+    assert _slugify("Любимая еда") == "lyubimaya_eda"
+    assert _slugify("Любит") == "lyubit"
+
+
+def test_slugify_ascii_and_mixed() -> None:
+    assert _slugify("Pet Name 2") == "pet_name_2"
+    assert _slugify("  Hello,  World!  ") == "hello_world"
+
+
+def test_slugify_empty_for_symbols_only() -> None:
+    assert _slugify("🎉🎉") == ""
+
+
+# ── add / list / delete ────────────────────────────────────────────────────────
+
+
+def test_add_derives_key_from_label(tmp_path) -> None:
     svc, db = _make_service(tmp_path)
     with db:
-        svc.add_category("pet_name", "Кличка питомца")
-        svc.add_category("favorite_movie", "Любимый фильм")
+        key = svc.add_category("Любимая еда")
+        assert key == "lyubimaya_eda"
         cats = svc.list_categories()
-        assert len(cats) == 2
-        assert cats[0]["key"] == "pet_name"
-        assert cats[0]["label"] == "Кличка питомца"
+        assert len(cats) == 1
+        assert cats[0]["key"] == "lyubimaya_eda"
+        assert cats[0]["label"] == "Любимая еда"
+        assert cats[0]["multi"] is False
+
+
+def test_add_multi_flag(tmp_path) -> None:
+    svc, db = _make_service(tmp_path)
+    with db:
+        svc.add_category("Увлечения", multi=True)
+        cats = svc.list_categories()
+        assert cats[0]["multi"] is True
+
+
+def test_duplicate_label_gets_unique_key(tmp_path) -> None:
+    svc, db = _make_service(tmp_path)
+    with db:
+        k1 = svc.add_category("Любит")
+        k2 = svc.add_category("Любит")
+        assert k1 == "lyubit"
+        assert k2 == "lyubit_2"
+        assert len(svc.list_categories()) == 2
+
+
+def test_symbol_only_label_falls_back(tmp_path) -> None:
+    svc, db = _make_service(tmp_path)
+    with db:
+        key = svc.add_category("🎉")
+        assert key.startswith("cat_")
+        assert svc.list_categories()[0]["label"] == "🎉"
 
 
 def test_list_keys(tmp_path) -> None:
     svc, db = _make_service(tmp_path)
     with db:
-        svc.add_category("pet_name", "Питомец")
-        keys = svc.list_keys()
-        assert "pet_name" in keys
+        svc.add_category("Питомец")
+        assert "pitomets" in svc.list_keys()
 
 
 def test_delete(tmp_path) -> None:
     svc, db = _make_service(tmp_path)
     with db:
-        svc.add_category("pet_name", "Питомец")
-        svc.add_category("car", "Машина")
-        svc.delete_category("pet_name")
+        k1 = svc.add_category("Питомец")
+        svc.add_category("Машина")
+        svc.delete_category(k1)
         cats = svc.list_categories()
         assert len(cats) == 1
-        assert cats[0]["key"] == "car"
-
-
-def test_invalid_key_slug_rejected(tmp_path) -> None:
-    svc, db = _make_service(tmp_path)
-    with db:
-        with pytest.raises(ValueError, match="key must be"):
-            svc.add_category("Имя питомца", "Питомец")  # spaces/Cyrillic
-
-
-def test_key_too_long_rejected(tmp_path) -> None:
-    svc, db = _make_service(tmp_path)
-    with db:
-        with pytest.raises(ValueError, match="key must be"):
-            svc.add_category("a" * 31, "Too long key")
+        assert cats[0]["label"] == "Машина"
 
 
 def test_empty_label_rejected(tmp_path) -> None:
     svc, db = _make_service(tmp_path)
     with db:
-        with pytest.raises(ValueError, match="label is required"):
-            svc.add_category("pet", "")
+        with pytest.raises(ValueError, match="название категории"):
+            svc.add_category("   ")
 
 
 def test_label_too_long_rejected(tmp_path) -> None:
     svc, db = _make_service(tmp_path)
     with db:
         with pytest.raises(ValueError, match="≤ 80"):
-            svc.add_category("pet", "x" * 81)
+            svc.add_category("x" * 81)
+
+
+def test_explicit_bad_key_rejected(tmp_path) -> None:
+    """An explicitly-passed non-slug key is still rejected."""
+    svc, db = _make_service(tmp_path)
+    with db:
+        with pytest.raises(ValueError, match="латинских"):
+            svc.add_category("Питомец", key="Имя питомца")
+
+
+# ── Integration with ContactFactsService ───────────────────────────────────────
 
 
 def test_custom_key_passes_set_fact(tmp_path) -> None:
-    """ContactFactsService.set_fact should accept custom category keys."""
+    """ContactFactsService.set_fact should accept auto-derived custom keys."""
     from unittest.mock import MagicMock
 
     from app.services.contact_facts_service import ContactFactsService
@@ -82,7 +125,7 @@ def test_custom_key_passes_set_fact(tmp_path) -> None:
     db.open()
     with db:
         cats_svc = FactCategoriesService(db.fact_categories)
-        cats_svc.add_category("pet_name", "Кличка питомца")
+        key = cats_svc.add_category("Кличка питомца")
 
         facts_svc = ContactFactsService(
             repository=db.facts,
@@ -93,8 +136,8 @@ def test_custom_key_passes_set_fact(tmp_path) -> None:
             enabled=True,
             categories_service=cats_svc,
         )
-        facts_svc.set_fact(1, "pet_name", "Шарик")
-        assert facts_svc.facts_as_dict(1)["pet_name"] == "Шарик"
+        facts_svc.set_fact(1, key, "Шарик")
+        assert facts_svc.facts_as_dict(1)[key] == "Шарик"
 
 
 def test_unknown_key_still_rejected(tmp_path) -> None:

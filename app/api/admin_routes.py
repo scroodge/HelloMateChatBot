@@ -65,9 +65,9 @@ class ContactFactWriteRequest(BaseModel):
 
 
 class FactCategoryWriteRequest(BaseModel):
-    key: str
     label: str
     multi: bool = False
+    key: str | None = None  # auto-derived from label if omitted
 
 
 class ContactExampleWriteRequest(BaseModel):
@@ -565,7 +565,9 @@ def create_admin_router(
         if fact_categories_service is None:
             raise HTTPException(status_code=503, detail="Fact categories service not enabled")
         try:
-            fact_categories_service.add_category(request.key, request.label, request.multi)
+            fact_categories_service.add_category(
+                request.label, multi=request.multi, key=request.key
+            )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         return fact_categories_service.list_categories()

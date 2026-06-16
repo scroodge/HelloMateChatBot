@@ -657,15 +657,13 @@
         <span>Свои категории фактов</span>
       </div>
       <div style="font-size:11px;color:var(--hint);margin-bottom:8px">
-        Глобальные кастомные поля (ключ + подпись). ИИ будет автоматически их заполнять из переписки.
+        Это <b>названия полей</b> о контакте, которые ИИ будет заполнять из переписки автоматически
+        (напр. «Любимая еда»). Сами значения добавляются в карточке контакта.
         Встроенные: имя, возраст, день рождения, город, страна, профессия, работа, интересы, отношения, семья, язык, заметки.
       </div>
       <div id="fact-categories-list"><div class="spinner">Загрузка...</div></div>
       <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px">
-        <div class="row">
-          <input type="text" id="fc-key-input" placeholder="ключ (напр. pet_name)" style="flex:1">
-          <input type="text" id="fc-label-input" placeholder="Подпись (напр. Кличка питомца)" style="flex:2">
-        </div>
+        <input type="text" id="fc-label-input" placeholder="Название категории (напр. Любимая еда)">
         <label class="toggle-row" style="font-size:13px">
           <span class="toggle-label">Многозначная (список значений) — напр. «любимое», «увлечения»</span>
           <label class="toggle"><input type="checkbox" id="fc-multi-input"><span class="slider"></span></label>
@@ -1577,13 +1575,11 @@ async function loadFactCategories() {
 }
 
 async function addFactCategory() {
-  const key   = document.getElementById('fc-key-input').value.trim();
   const label = document.getElementById('fc-label-input').value.trim();
   const multi = document.getElementById('fc-multi-input').checked;
-  if (!key || !label) { tg.showAlert?.('Заполни ключ и подпись'); return; }
+  if (!label) { tg.showAlert?.('Укажи название категории'); return; }
   try {
-    await post('/admin/fact-categories', { key, label, multi });
-    document.getElementById('fc-key-input').value = '';
+    await post('/admin/fact-categories', { label, multi });
     document.getElementById('fc-label-input').value = '';
     document.getElementById('fc-multi-input').checked = false;
     toast('Категория добавлена');
