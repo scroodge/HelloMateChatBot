@@ -7,7 +7,6 @@ import logging
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from app.handlers.suggest import build_suggest_fn
 from app.services.memory_service import MemoryService
 from app.services.reply_service import ReplyService
 from app.services.settings_service import SettingsService
@@ -50,18 +49,12 @@ async def private_voice_message(update: Update, context: ContextTypes.DEFAULT_TY
             memory_service.record_user_message(user_id, transcription)
 
         if reply_mode == "suggest":
-            admin_ids = sorted(context.bot_data.get("admin_user_ids", set()))
-            if not admin_ids:
-                return
             draft = await reply_service.draft_reply(user_id, transcription)
             if draft:
-                on_suggest = build_suggest_fn(
-                    context=context,
-                    target_user_ids=admin_ids,
-                    contact_display_name=update.effective_user.full_name or str(user_id),
-                    contact_message=f"🎤 {transcription}",
-                )
-                await on_suggest(draft)
+                # Store in the Suggest Inbox (Mini App) only — nothing sent to chat.
+                suggestions_service = context.bot_data.get("suggestions_service")
+                if suggestions_service is not None:
+                    suggestions_service.record(user_id, f"🎤 {transcription}", draft)
             return
 
         reply = await reply_service.generate_reply(user_id, transcription)

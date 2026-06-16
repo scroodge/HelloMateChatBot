@@ -153,60 +153,6 @@ async def test_draft_reply_returns_none_on_llm_error() -> None:
     assert result is None
 
 
-# ── Suggestion DM (owner notification) ─────────────────────────────────────────
-
-
-def _suggest_context_capture():
-    """Build a fake context whose bot.send_message records calls."""
-    captured = {}
-
-    async def fake_send_message(**kwargs):
-        captured.update(kwargs)
-
-    context = MagicMock()
-    context.bot.send_message = AsyncMock(side_effect=fake_send_message)
-    return context, captured
-
-
-@pytest.mark.asyncio
-async def test_suggestion_short_draft_has_copy_button() -> None:
-    from app.handlers.suggest import build_suggest_fn
-
-    context, captured = _suggest_context_capture()
-    on_suggest = build_suggest_fn(
-        context=context,
-        target_user_ids=[100000001],
-        contact_display_name="Аня",
-        contact_message="привет",
-    )
-    await on_suggest("привет! как дела?")
-
-    assert captured["chat_id"] == 100000001
-    assert "привет! как дела?" in captured["text"]
-    # short draft -> copy button present
-    assert captured["reply_markup"] is not None
-
-
-@pytest.mark.asyncio
-async def test_suggestion_long_draft_omits_copy_button() -> None:
-    """Drafts over 256 chars must NOT attach a CopyTextButton (Telegram rejects it)."""
-    from app.handlers.suggest import build_suggest_fn
-
-    context, captured = _suggest_context_capture()
-    long_draft = "а" * 300
-    on_suggest = build_suggest_fn(
-        context=context,
-        target_user_ids=[100000001],
-        contact_display_name="Аня",
-        contact_message="расскажи подробно",
-    )
-    await on_suggest(long_draft)
-
-    assert captured["chat_id"] == 100000001
-    assert long_draft in captured["text"]  # full draft still in the body for copy
-    assert captured["reply_markup"] is None  # no button -> no Button_copy_text_invalid
-
-
 # ── Pipeline routing ───────────────────────────────────────────────────────────
 
 
@@ -225,7 +171,6 @@ async def test_deliver_ai_reply_off_skips_everything() -> None:
         reply_service=reply_service,
         reply_fn=AsyncMock(),
         reply_mode="off",
-        on_suggest=AsyncMock(),
         event_service=None,
     )
 
@@ -234,14 +179,15 @@ async def test_deliver_ai_reply_off_skips_everything() -> None:
 
 
 @pytest.mark.asyncio
-async def test_deliver_ai_reply_suggest_calls_on_suggest() -> None:
+async def test_deliver_ai_reply_suggest_records_to_inbox_no_chat_message() -> None:
+    """Suggest mode stores the draft in the inbox and never writes to the chat."""
     from app.handlers.incoming import _deliver_ai_reply
     from app.services.reply_service import ReplyService
 
     reply_service = MagicMock(spec=ReplyService)
     reply_service.draft_reply = AsyncMock(return_value="черновик")
 
-    on_suggest = AsyncMock()
+    suggestions_service = MagicMock()
     reply_fn = AsyncMock()
 
     await _deliver_ai_reply(
@@ -250,13 +196,13 @@ async def test_deliver_ai_reply_suggest_calls_on_suggest() -> None:
         reply_service=reply_service,
         reply_fn=reply_fn,
         reply_mode="suggest",
-        on_suggest=on_suggest,
         event_service=None,
+        suggestions_service=suggestions_service,
     )
 
     reply_service.draft_reply.assert_awaited_once_with(1, "привет")
-    on_suggest.assert_awaited_once_with("черновик")
-    reply_fn.assert_not_called()
+    suggestions_service.record.assert_called_once_with(1, "привет", "черновик")
+    reply_fn.assert_not_called()  # nothing sent to the chat
 
 
 @pytest.mark.asyncio
@@ -275,7 +221,6 @@ async def test_deliver_ai_reply_auto_sends_directly() -> None:
         reply_service=reply_service,
         reply_fn=reply_fn,
         reply_mode="auto",
-        on_suggest=None,
         event_service=None,
     )
 
@@ -284,22 +229,24 @@ async def test_deliver_ai_reply_auto_sends_directly() -> None:
 
 
 @pytest.mark.asyncio
-async def test_deliver_ai_reply_suggest_no_suggest_fn_is_silent() -> None:
-    """If on_suggest is None in suggest mode, draft is generated but silently dropped."""
+async def test_deliver_ai_reply_suggest_no_service_is_silent() -> None:
+    """If no suggestions_service is wired up, the draft is generated but dropped."""
     from app.handlers.incoming import _deliver_ai_reply
     from app.services.reply_service import ReplyService
 
     reply_service = MagicMock(spec=ReplyService)
     reply_service.draft_reply = AsyncMock(return_value="черновик")
+    reply_fn = AsyncMock()
 
     await _deliver_ai_reply(
         contact_user_id=1,
         message_text="привет",
         reply_service=reply_service,
-        reply_fn=AsyncMock(),
+        reply_fn=reply_fn,
         reply_mode="suggest",
-        on_suggest=None,  # no callback wired up
         event_service=None,
+        suggestions_service=None,
     )
 
     reply_service.draft_reply.assert_awaited_once()
+    reply_fn.assert_not_called()

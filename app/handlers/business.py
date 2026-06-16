@@ -8,7 +8,6 @@ from telegram import Message, Update
 from telegram.ext import ContextTypes
 
 from app.handlers.incoming import handle_incoming_text
-from app.handlers.suggest import build_suggest_fn
 from app.services.business_service import BusinessService
 from app.services.memory_service import MemoryService
 from app.services.reply_service import ReplyService
@@ -128,15 +127,6 @@ async def business_message_handler(update: Update, context: ContextTypes.DEFAULT
         async def reply_fn(text: str) -> None:
             await message.reply_text(text)
 
-        on_suggest = None
-        if reply_mode == "suggest":
-            on_suggest = build_suggest_fn(
-                context=context,
-                target_user_ids=[connection.owner_user_id],
-                contact_display_name=contact_display_name or str(contact_user_id),
-                contact_message=message.text,
-            )
-
         await handle_incoming_text(
             contact_user_id=contact_user_id,
             message_text=message.text,
@@ -145,7 +135,6 @@ async def business_message_handler(update: Update, context: ContextTypes.DEFAULT
             sender_is_owner=False,
             contact_display_name=contact_display_name,
             reply_mode=reply_mode,
-            on_suggest=on_suggest,
         )
         return
 
@@ -188,13 +177,12 @@ async def _handle_business_voice(
         if reply_mode == "suggest":
             draft = await reply_service.draft_reply(contact_user_id, transcription)
             if draft:
-                on_suggest = build_suggest_fn(
-                    context=context,
-                    target_user_ids=[owner_user_id],
-                    contact_display_name=str(contact_user_id),
-                    contact_message=f"🎤 {transcription}",
-                )
-                await on_suggest(draft)
+                # Store in the Suggest Inbox (Mini App) only — nothing sent to chat.
+                suggestions_service = context.bot_data.get("suggestions_service")
+                if suggestions_service is not None:
+                    suggestions_service.record(
+                        contact_user_id, f"🎤 {transcription}", draft
+                    )
         else:
             reply = await reply_service.generate_reply(contact_user_id, transcription)
             if reply:

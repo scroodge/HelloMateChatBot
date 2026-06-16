@@ -40,7 +40,6 @@ async def handle_incoming_text(
     sender_is_owner: bool = False,
     contact_display_name: str | None = None,
     reply_mode: str = "auto",
-    on_suggest: ReplyFn | None = None,
 ) -> None:
     """Process an incoming text message for a contact.
 
@@ -49,7 +48,8 @@ async def handle_incoming_text(
 
     reply_mode controls how AI replies are delivered for contact messages:
     - "auto"    — reply directly via reply_fn (default, used for direct bot chat)
-    - "suggest" — generate a draft without recording; deliver via on_suggest
+    - "suggest" — store a draft in the Suggest Inbox (Mini App); nothing is sent
+                  to the chat
     - "off"     — skip AI reply entirely
     """
 
@@ -65,7 +65,6 @@ async def handle_incoming_text(
                 sender_is_owner=True,
                 contact_display_name=contact_display_name,
                 reply_mode=reply_mode,
-                on_suggest=on_suggest,
             )
             return
 
@@ -78,7 +77,6 @@ async def handle_incoming_text(
                 sender_is_owner=False,
                 contact_display_name=contact_display_name,
                 reply_mode=reply_mode,
-                on_suggest=on_suggest,
             )
 
         await debounce_service.enqueue(
@@ -96,7 +94,6 @@ async def handle_incoming_text(
         sender_is_owner=sender_is_owner,
         contact_display_name=contact_display_name,
         reply_mode=reply_mode,
-        on_suggest=on_suggest,
     )
 
 
@@ -109,7 +106,6 @@ async def _process_incoming_text(
     sender_is_owner: bool = False,
     contact_display_name: str | None = None,
     reply_mode: str = "auto",
-    on_suggest: ReplyFn | None = None,
 ) -> None:
     """Run greeting / memory / AI logic for a (possibly batched) message."""
 
@@ -185,7 +181,6 @@ async def _process_incoming_text(
             reply_service=reply_service,
             reply_fn=reply_fn,
             reply_mode=reply_mode,
-            on_suggest=on_suggest,
             event_service=event_service,
             suggestions_service=suggestions_service,
         )
@@ -236,7 +231,6 @@ async def _process_incoming_text(
         reply_service=reply_service,
         reply_fn=reply_fn,
         reply_mode=reply_mode,
-        on_suggest=on_suggest,
         event_service=event_service,
         suggestions_service=suggestions_service,
     )
@@ -249,18 +243,16 @@ async def _deliver_ai_reply(
     reply_service: ReplyService | None,
     reply_fn: ReplyFn,
     reply_mode: str,
-    on_suggest: ReplyFn | None,
     event_service: EventService | None,
     suggestions_service: object | None = None,
 ) -> None:
-    """Route AI reply based on mode: auto sends directly, suggest drafts to owner, off skips."""
+    """Route AI reply based on mode: auto sends directly, suggest stores to inbox, off skips."""
 
     logger.info(
-        "deliver_ai_reply contact=%s mode=%s has_reply_service=%s has_on_suggest=%s",
+        "deliver_ai_reply contact=%s mode=%s has_reply_service=%s",
         contact_user_id,
         reply_mode,
         isinstance(reply_service, ReplyService),
-        on_suggest is not None,
     )
 
     if reply_mode == "off":
@@ -270,17 +262,16 @@ async def _deliver_ai_reply(
         return
 
     if reply_mode == "suggest":
+        # Suggest mode never writes to the chat: the draft is stored in the
+        # Suggest Inbox (Mini App) only. No DM, no message to the contact.
         draft = await reply_service.draft_reply(contact_user_id, message_text)
         logger.info(
             "suggest draft for contact=%s: %s",
             contact_user_id,
-            "got draft" if draft else "None",
+            "stored" if draft else "None",
         )
-        if draft:
-            if suggestions_service is not None:
-                suggestions_service.record(contact_user_id, message_text, draft)
-            if on_suggest is not None:
-                await on_suggest(draft)
+        if draft and suggestions_service is not None:
+            suggestions_service.record(contact_user_id, message_text, draft)
         return
 
     # auto (default)

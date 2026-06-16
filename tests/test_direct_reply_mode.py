@@ -37,7 +37,7 @@ def _make_context(settings_service: SettingsService, admin_ids: set[int]):
 
 
 @pytest.mark.asyncio
-async def test_direct_suggest_passes_suggest_mode_and_builds_callback(tmp_path) -> None:
+async def test_direct_suggest_passes_suggest_mode(tmp_path) -> None:
     db = Database(f"sqlite:///{tmp_path / 'direct.db'}")
     db.open()
     with db:
@@ -50,12 +50,11 @@ async def test_direct_suggest_passes_suggest_mode_and_builds_callback(tmp_path) 
 
         kwargs = mock_pipe.await_args.kwargs
         assert kwargs["reply_mode"] == "suggest"
-        assert kwargs["on_suggest"] is not None  # admin DM callback wired up
         assert kwargs["sender_is_owner"] is False
 
 
 @pytest.mark.asyncio
-async def test_direct_auto_passes_auto_and_no_suggest(tmp_path) -> None:
+async def test_direct_auto_passes_auto(tmp_path) -> None:
     db = Database(f"sqlite:///{tmp_path / 'direct.db'}")
     db.open()
     with db:
@@ -69,7 +68,6 @@ async def test_direct_auto_passes_auto_and_no_suggest(tmp_path) -> None:
 
         kwargs = mock_pipe.await_args.kwargs
         assert kwargs["reply_mode"] == "auto"
-        assert kwargs["on_suggest"] is None
 
 
 @pytest.mark.asyncio
@@ -87,7 +85,6 @@ async def test_direct_off_passes_off_mode(tmp_path) -> None:
 
         kwargs = mock_pipe.await_args.kwargs
         assert kwargs["reply_mode"] == "off"
-        assert kwargs["on_suggest"] is None
 
 
 @pytest.mark.asyncio
@@ -105,14 +102,15 @@ async def test_greeting_suppressed_outside_auto_mode() -> None:
     reply_service.draft_reply = AsyncMock(return_value="черновик")
     reply_service.generate_reply = AsyncMock(return_value="ответ")
 
+    suggestions_service = MagicMock()
     context = MagicMock()
     context.bot_data = {
         "settings_service": settings_service,
         "greeting_service": MagicMock(spec=GreetingService),
         "greeting_text": "привет!",
         "reply_service": reply_service,
+        "suggestions_service": suggestions_service,
     }
-    on_suggest = AsyncMock()
 
     await incoming._process_incoming_text(
         contact_user_id=1,
@@ -121,10 +119,9 @@ async def test_greeting_suppressed_outside_auto_mode() -> None:
         reply_fn=reply_fn,
         sender_is_owner=False,
         reply_mode="suggest",  # ... but mode is suggest
-        on_suggest=on_suggest,
     )
 
     # No greeting (or any message) was pushed to the contact directly.
     reply_fn.assert_not_called()
-    # The reply was routed as a suggestion instead.
-    on_suggest.assert_awaited_once_with("черновик")
+    # The reply was stored in the Suggest Inbox instead.
+    suggestions_service.record.assert_called_once_with(1, "привет", "черновик")
