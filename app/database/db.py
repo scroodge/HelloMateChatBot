@@ -15,6 +15,7 @@ from types import TracebackType
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 
+from app.database.repositories.assistant import AssistantProfilesRepositoryImpl
 from app.database.repositories.business import BusinessRepositoryImpl
 from app.database.repositories.documents import DocumentRepositoryImpl
 from app.database.repositories.events import EventRepositoryImpl
@@ -43,6 +44,7 @@ class Database:
         self.suggestions = SuggestionsRepositoryImpl(self)
         self.facts = ContactFactsRepositoryImpl(self)
         self.fact_categories = FactCategoriesRepositoryImpl(self)
+        self.assistant_profiles = AssistantProfilesRepositoryImpl(self)
         self.greetings = GreetingRepositoryImpl(self)
         self.greeting_rules = GreetingRulesRepositoryImpl(self)
         self.settings = SettingsRepositoryImpl(self)

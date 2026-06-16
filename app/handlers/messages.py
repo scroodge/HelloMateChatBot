@@ -7,7 +7,9 @@ import logging
 from telegram import Update
 from telegram.ext import ContextTypes
 
+from app.auth.admin import is_admin
 from app.handlers.incoming import handle_incoming_text
+from app.services.assistant_service import AssistantService
 from app.services.settings_service import SettingsService
 
 logger = logging.getLogger(__name__)
@@ -23,6 +25,23 @@ async def private_text_message(update: Update, context: ContextTypes.DEFAULT_TYP
 
     user_id = update.effective_user.id
     message_text = update.effective_message.text or ""
+
+    # Owner personal-assistant mode: when the owner has an active assistant
+    # profile, their direct messages are answered by that assistant (isolated
+    # memory), bypassing the contact pipeline entirely.
+    admin_user_ids = context.bot_data.get("admin_user_ids", set())
+    assistant_service = context.bot_data.get("assistant_service")
+    if (
+        isinstance(admin_user_ids, set)
+        and is_admin(user_id, admin_user_ids)
+        and isinstance(assistant_service, AssistantService)
+        and assistant_service.is_active(user_id)
+        and message_text
+    ):
+        reply = await assistant_service.reply(user_id, message_text)
+        if reply:
+            await update.effective_message.reply_text(reply)
+        return
 
     # Respect the contact's reply mode here too: a direct chat must never get an
     # automatic reply unless the resolved mode is explicitly "auto". The default

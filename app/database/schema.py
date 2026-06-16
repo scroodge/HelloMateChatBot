@@ -235,6 +235,18 @@ recall_index_meta = Table(
     Column("updated_at", Text, nullable=False),
 )
 
+assistant_profiles = Table(
+    "assistant_profiles",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("owner_id", Integer, nullable=False),
+    Column("name", Text, nullable=False),
+    Column("persona", Text, nullable=False),
+    Column("created_at", Text, nullable=False),
+    Index("idx_assistant_profiles_owner", "owner_id"),
+    Index("uq_assistant_profiles_owner_name", "owner_id", "name", unique=True),
+)
+
 fact_categories = Table(
     "fact_categories",
     metadata,

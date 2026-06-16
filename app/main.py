@@ -35,6 +35,7 @@ from app.handlers.admin import (
     togglegreeting_command,
     userinfo_command,
 )
+from app.handlers.assistant import assistant_command
 from app.handlers.business import business_connection_handler, business_message_handler
 from app.handlers.callbacks import callback_router
 from app.handlers.commands import (
@@ -51,6 +52,7 @@ from app.handlers.messages import private_text_message
 from app.handlers.mood import mood_command, mood_history_command
 from app.handlers.voice import private_voice_message
 from app.jobs.greeting_jobs import register_greeting_jobs
+from app.services.assistant_service import AssistantService
 from app.services.business_service import BusinessService
 from app.services.contact_facts_service import ContactFactsService
 from app.services.conversation_starter_service import ConversationStarterService
@@ -150,6 +152,13 @@ def build_application(config: Config, database: Database):
     )
     examples_service = ContactExamplesService(database.examples)
     suggestions_service = SuggestionsService(database.suggestions)
+    assistant_service = AssistantService(
+        repository=database.assistant_profiles,
+        memory_service=memory_service,
+        llm_service=llm_service,
+        settings_service=settings_service,
+        enabled=config.ai_replies_enabled,
+    )
     recall_service = RecallService(
         memory_service=memory_service,
         embedding_service=embedding_service,
@@ -198,6 +207,7 @@ def build_application(config: Config, database: Database):
     application.bot_data["recall_service"] = recall_service
     application.bot_data["examples_service"] = examples_service
     application.bot_data["suggestions_service"] = suggestions_service
+    application.bot_data["assistant_service"] = assistant_service
     application.bot_data["reply_service"] = reply_service
     application.bot_data["persona_service"] = persona_service
     application.bot_data["event_service"] = event_service
@@ -256,6 +266,7 @@ def build_application(config: Config, database: Database):
     application.add_handler(CommandHandler("setpersona", setpersona_command, filters=private_chat))
     application.add_handler(CommandHandler("getpersona", getpersona_command, filters=private_chat))
     application.add_handler(CommandHandler("userinfo", userinfo_command, filters=private_chat))
+    application.add_handler(CommandHandler("assistant", assistant_command, filters=private_chat))
     application.add_handler(CallbackQueryHandler(callback_router))
     if config.business_mode_enabled:
         application.add_handler(BusinessConnectionHandler(business_connection_handler))

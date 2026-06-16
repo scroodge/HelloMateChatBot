@@ -89,6 +89,11 @@ class MemoryService:
         )
         return self.repository.set_summary(item)
 
+    def clear_messages(self, user_id: int) -> None:
+        """Delete all conversation messages for a key (used to reset a thread)."""
+
+        self.repository.clear_messages(user_id)
+
     def count_messages(self, user_id: int) -> int:
         """Total stored messages for a user."""
 

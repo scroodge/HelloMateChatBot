@@ -34,6 +34,8 @@ class MemoryRepository(Protocol):
 
     def count_messages(self, user_id: int) -> int: ...
 
+    def clear_messages(self, user_id: int) -> None: ...
+
     def list_messages_asc(
         self, user_id: int, *, offset: int, limit: int
     ) -> list[ConversationMessage]: ...
@@ -169,6 +171,14 @@ class MemoryRepositoryImpl:
                     .select_from(conversation_messages)
                     .where(conversation_messages.c.user_id == user_id)
                 ).scalar_one()
+            )
+
+    def clear_messages(self, user_id: int) -> None:
+        with self._db.engine.begin() as connection:
+            connection.execute(
+                delete(conversation_messages).where(
+                    conversation_messages.c.user_id == user_id
+                )
             )
 
     def list_messages_asc(
