@@ -1,6 +1,6 @@
 {
   "start_message": "Привет! Я HelloMate, открытый Telegram-бот для личных чатов. Напиши мне сообщение, и я раз в день поздороваюсь с тобой.",
-  "help_message": "Сейчас я работаю так: в личном чате отвечаю на первое сообщение дня, а затем могу поддерживать разговор, если включены AI-ответы.",
+  "help_message": "Я HelloMate — помощник для личных чатов и Telegram Business.\n\nКоманды:\n/start — начать\n/help — эта справка\n/about — о боте\n/lang ru|en — язык\n/profile — твой профиль\n/setname <имя> — задать имя\n/mood — отметить настроение\n/moodhistory — история настроения\n/remember <текст> — сохранить заметку\n/dashboard — открыть Mini App (панель управления)\n\nЛичный ассистент (для владельца):\n/assistant — режим ассистента (учитель английского и т.п.); без аргументов покажет свою справку\n\nАдмин-команды: /admin",
   "about_message": "HelloMate — open-source Telegram companion bot for private chats. Поддерживает приветствия, настройки, настроение, память и AI-ответы.",
   "greeting_disabled": "Приветствия для тебя сейчас отключены.",
   "lang_updated": "Язык изменён на: {language}",
@@ -24,7 +24,7 @@
   "dashboard_unavailable": "Панель недоступна. Укажите MINI_APP_URL или MINI_APP_DEV=true.",
   "dashboard_dev_local": "Локальная панель: {url}\nОткройте ссылку в браузере (режим MINI_APP_DEV).",
   "admin_only": "Эта команда доступна только администраторам.",
-  "admin_help": "Админ-команды: /greetings, /addgreeting, /delgreeting, /togglegreeting, /setgreeting, /setgreettext, /setgreetschedule, /sethour, /setpersona, /getpersona, /userinfo",
+  "admin_help": "Админ-команды: /greetings, /addgreeting, /delgreeting, /togglegreeting, /setgreeting, /setgreettext, /setgreetschedule, /sethour, /setpersona, /getpersona, /userinfo, /settings, /setlang, /setstarters, /assistant",
   "settings_title": "Глобальные настройки:",
   "settings_item": "{key} = {value}",
   "settings_usage": "Использование: /settings set <key> <value>",

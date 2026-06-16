@@ -27,12 +27,14 @@ console, reply debouncing for rapid short messages, and a personal RAG knowledge
 - **Shared chat memory** — per-contact history includes both the contact's and the owner's messages in managed chats
 - **Rolling conversation summary** — older history is compressed into a running summary so context survives beyond the recent window
 - **Semantic recall** — every contact message is embedded and indexed; the most relevant past messages are retrieved by meaning and injected into the prompt, so the bot can recall things said weeks ago even if they fell out of both the window and the summary
-- **Per-contact durable facts** — the bot extracts and remembers stable facts about each contact (name, city, job, birthday, interests…) and injects them into the prompt
+- **Per-contact durable facts** — the bot extracts and remembers stable facts about each contact (name, city, job, birthday, interests…) and injects them into the prompt (using human labels, not raw keys)
+- **Custom fact categories** — owner-defined global categories (e.g. "Любимая еда") with auto-generated keys (Cyrillic transliterated); the LLM auto-extracts into them. Categories can be single- or multi-valued (lists like interests/family/favorites), shown as removable chips in the contact card
 - **Openness dial** — per-contact control of how much to disclose (`open` / `neutral` / `reserved`); applied last so it overrides persona and tone
 - **Owner style learning (opt-in)** — the bot can learn the owner's real writing manner per contact and mimic it; learns only from genuine owner replies, never from AI-generated ones
-- **Few-shot examples** — per-contact curated (contact message → ideal reply) pairs, editable in the Mini App or saved straight from the Playground; injected into the prompt as a tone/format guide (up to 10 per contact)
+- **Few-shot examples** — per-contact curated (contact message → reply) pairs, editable in the Mini App or saved straight from the Playground; injected into the prompt as a tone/format guide. Both **positive** (ideal replies to emulate) and **negative** (anti-patterns to avoid), up to 10 of each per contact
 - **Business reply modes** — per-contact and global: suggest a draft, auto-reply, or stay silent
-- **Suggest Inbox** — in suggest mode, drafts are persisted and reviewable in the Mini App: edit inline, copy, save as a few-shot example, or dismiss (with a pending-count badge)
+- **Suggest Inbox** — in suggest mode, drafts are stored **only** in the Mini App inbox (no chat message): review, edit inline, copy, save as a positive or negative example, or dismiss (with a pending-count badge). Voice messages are drafted into the inbox too
+- **Owner personal assistant** — use the direct bot chat as a personal assistant via `/assistant`: multiple named personas (e.g. an English teacher), each with its own isolated persistent memory, fully separate from contact data. Owner-only
 - Daily greetings with timezone-aware calendar logic
 - Random conversation starters and scheduled proactive greetings
 - Per-user settings, i18n (`ru`, `en`), and admin controls
@@ -266,6 +268,7 @@ chmod +x update.sh
 | `/moodhistory` | View recent mood entries |
 | `/remember` | Save a note to your knowledge base |
 | `/dashboard` | Open Telegram Mini App dashboard |
+| `/assistant` | Owner: personal-assistant mode with named personas (`new`/`use`/`off`/`list`/`reset`/`del`) |
 | `/admin` | Admin command help |
 | `/settings` | View or set global bot settings |
 | `/setlang` | Admin: set user language |
@@ -413,6 +416,7 @@ Restart the bot, then open your bot in Telegram and tap the Mini App button.
 - Phase 13 (done): semantic recall — per-message embeddings indexed in the background (lazy watermark backfill), retrieved by cosine similarity and injected between the summary and the live window; recall coverage shown in the Mini App **Статистика** tab
 - Phase 14 (done): per-contact curated few-shot examples — owner-picked ideal replies injected as a tone/format guide; editable in the contact card or saved directly from the Playground
 - Phase 15 (done): Mini App UX overhaul — Suggest Inbox (review/edit/copy/save/dismiss drafts), contacts search + sort + reply-mode/examples badges, contact detail split into sub-tabs (Персона/Факты/Эталоны/История), native Telegram toasts/haptics/BackButton
+- Phase 16 (done): negative few-shot examples (anti-patterns); custom global fact categories with auto-derived keys and multi-value (list) support, labelled in prompt and UI; Suggest mode is inbox-only (no chat/DM duplicate, voice drafts included); owner personal-assistant mode (`/assistant`) with named personas and isolated persistent memory
 
 ## Contributing
 

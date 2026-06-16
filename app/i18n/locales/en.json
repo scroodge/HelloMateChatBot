@@ -1,6 +1,6 @@
 {
   "start_message": "Hi! I'm HelloMate, an open-source Telegram bot for private chats. Send me a message and I'll greet you once a day.",
-  "help_message": "I greet you on the first message of the day and can keep chatting when AI replies are enabled.",
+  "help_message": "I'm HelloMate — a companion for private chats and Telegram Business.\n\nCommands:\n/start — get started\n/help — this help\n/about — about the bot\n/lang ru|en — language\n/profile — your profile\n/setname <name> — set your name\n/mood — log your mood\n/moodhistory — mood history\n/remember <text> — save a note\n/dashboard — open the Mini App (admin panel)\n\nPersonal assistant (owner):\n/assistant — assistant mode (English teacher, etc.); run with no args for help\n\nAdmin commands: /admin",
   "about_message": "HelloMate is an open-source Telegram companion bot for private chats. It supports greetings, settings, mood tracking, memory, and AI replies.",
   "greeting_disabled": "Greetings are currently disabled for you.",
   "lang_updated": "Language changed to: {language}",
@@ -24,7 +24,7 @@
   "dashboard_unavailable": "Dashboard is unavailable. Set MINI_APP_URL or MINI_APP_DEV=true.",
   "dashboard_dev_local": "Local dev dashboard: {url}\nOpen this link in your browser (MINI_APP_DEV mode).",
   "admin_only": "This command is only available to administrators.",
-  "admin_help": "Admin commands: /greetings, /addgreeting, /delgreeting, /togglegreeting, /setgreeting, /setgreettext, /setgreetschedule, /sethour, /setpersona, /getpersona, /userinfo",
+  "admin_help": "Admin commands: /greetings, /addgreeting, /delgreeting, /togglegreeting, /setgreeting, /setgreettext, /setgreetschedule, /sethour, /setpersona, /getpersona, /userinfo, /settings, /setlang, /setstarters, /assistant",
   "settings_title": "Global settings:",
   "settings_item": "{key} = {value}",
   "settings_usage": "Usage: /settings set <key> <value>",
