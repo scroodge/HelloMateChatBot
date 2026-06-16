@@ -43,6 +43,39 @@ KNOWN_KEYS = {
 # items individually). Atomic keys (name, birthday, …) stay single-valued.
 MULTI_BUILTIN_KEYS = {"interests", "family"}
 
+# Human-readable labels for the built-in keys, per language. Used both for the
+# Mini App and for the reply prompt (the model reads the label, not the slug).
+BUILTIN_LABELS = {
+    "ru": {
+        "name": "Имя",
+        "age": "Возраст",
+        "birthday": "День рождения",
+        "city": "Город",
+        "country": "Страна",
+        "occupation": "Профессия",
+        "workplace": "Работа",
+        "interests": "Интересы",
+        "relationship": "Отношения",
+        "family": "Семья",
+        "language": "Язык",
+        "notes": "Заметки",
+    },
+    "en": {
+        "name": "Name",
+        "age": "Age",
+        "birthday": "Birthday",
+        "city": "City",
+        "country": "Country",
+        "occupation": "Occupation",
+        "workplace": "Workplace",
+        "interests": "Interests",
+        "relationship": "Relationship",
+        "family": "Family",
+        "language": "Language",
+        "notes": "Notes",
+    },
+}
+
 # Hard cap on how many values a multi-valued fact may accumulate.
 MAX_FACT_VALUES = 15
 
@@ -241,6 +274,14 @@ class ContactFactsService:
     def is_multi(self, key: str) -> bool:
         return key in self._multi_keys()
 
+    def _label_map(self, language: str) -> dict[str, str]:
+        """key -> human label, merging built-in (localized) and custom labels."""
+        labels = dict(BUILTIN_LABELS.get(language, BUILTIN_LABELS["en"]))
+        if self.categories_service:
+            for c in self.categories_service.list_categories():
+                labels[str(c["key"])] = str(c["label"])
+        return labels
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -263,15 +304,30 @@ class ContactFactsService:
         return out
 
     def facts_structured(self, user_id: int) -> dict[str, dict[str, object]]:
-        """Facts as key -> {multi, values}. Used by the API/UI to render chips."""
+        """Facts as key -> {multi, values, label}. Used by the API/UI to render chips."""
         multi = self._multi_keys()
+        try:
+            language = self.settings_service.get_language(user_id)
+        except Exception:
+            language = "ru"
+        labels = self._label_map(language)
         out: dict[str, dict[str, object]] = {}
         for f in self.get_facts(user_id):
+            label = labels.get(f.key, f.key)
             if f.key in multi:
-                out[f.key] = {"multi": True, "values": _decode_values(f.value)}
+                out[f.key] = {"multi": True, "values": _decode_values(f.value), "label": label}
             else:
-                out[f.key] = {"multi": False, "values": [f.value]}
+                out[f.key] = {"multi": False, "values": [f.value], "label": label}
         return out
+
+    def facts_for_prompt(self, user_id: int, language: str) -> dict[str, str]:
+        """Facts as human-label -> value string, for injection into the reply prompt.
+
+        The model reads the label (e.g. "Любимая еда"), never the raw slug
+        (e.g. "lyubimaya_eda"), which it would otherwise have to decode.
+        """
+        labels = self._label_map(language)
+        return {labels.get(k, k): v for k, v in self.facts_as_dict(user_id).items()}
 
     def set_fact(self, user_id: int, key: str, value: str) -> None:
         """Set (single) or append (multi) a fact value.

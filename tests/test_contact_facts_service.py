@@ -279,7 +279,9 @@ def test_facts_structured_single(tmp_path) -> None:
     with db:
         svc.set_fact(1, "name", "Катя")
         s = svc.facts_structured(1)
-        assert s["name"] == {"multi": False, "values": ["Катя"]}
+        assert s["name"]["multi"] is False
+        assert s["name"]["values"] == ["Катя"]
+        assert s["name"]["label"] == "Имя"  # localized built-in label
 
 
 def test_remove_fact_value(tmp_path) -> None:
@@ -330,6 +332,40 @@ def test_custom_multi_category(tmp_path) -> None:
         svc.set_fact(1, fav_key, "суши")
         svc.set_fact(1, fav_key, "Матрица")
         assert svc.facts_structured(1)[fav_key]["values"] == ["суши", "Матрица"]
+
+
+def test_facts_for_prompt_uses_labels(tmp_path) -> None:
+    """The reply prompt must see human labels, not raw slugs."""
+    from app.services.fact_categories_service import FactCategoriesService
+
+    db = Database(f"sqlite:///{tmp_path / 'facts.db'}")
+    db.open()
+    with db:
+        cats = FactCategoriesService(db.fact_categories)
+        fav_key = cats.add_category("Любимая еда", multi=True)
+        dislike_key = cats.add_category("Не нравится", multi=True)
+        memory = MemoryService(db.memory, window_size=10)
+        settings = SettingsService(db.settings, "ru", 9)
+        svc = ContactFactsService(
+            repository=db.facts,
+            memory_service=memory,
+            llm_service=MagicMock(),
+            settings_service=settings,
+            refresh_interval=5,
+            enabled=True,
+            categories_service=cats,
+        )
+        svc.set_fact(1, "name", "Ирина")
+        svc.set_fact(1, fav_key, "безе")
+        svc.set_fact(1, dislike_key, "шоколадный торт, клубнику со сметаной")
+
+        prompt_facts = svc.facts_for_prompt(1, "ru")
+        # Built-in localized + custom labels, no raw slugs
+        assert prompt_facts["Имя"] == "Ирина"
+        assert prompt_facts["Любимая еда"] == "безе"
+        assert prompt_facts["Не нравится"] == "шоколадный торт, клубнику со сметаной"
+        assert fav_key not in prompt_facts
+        assert dislike_key not in prompt_facts
 
 
 @pytest.mark.asyncio

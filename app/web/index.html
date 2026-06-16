@@ -1099,7 +1099,7 @@ function renderFacts(facts) {
     return;
   }
   el.innerHTML = entries.map(([k, f]) => {
-    const label  = FACT_LABELS[k] || k;
+    const label  = (f && f.label) || FACT_LABELS[k] || k;
     const multi  = f && f.multi;
     const values = (f && f.values) || [];
     let body;

@@ -271,7 +271,7 @@ class ReplyService:
                     else f" From past conversations: {recall_context}."
                 )
         if self.facts_service is not None:
-            facts = self.facts_service.facts_as_dict(user_id)
+            facts = self.facts_service.facts_for_prompt(user_id, language)
             if facts:
                 facts_str = "; ".join(f"{k}={v}" for k, v in facts.items())
                 system_prompt += (
