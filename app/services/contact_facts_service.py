@@ -42,7 +42,7 @@ KNOWN_KEYS = {
 _JSON_FENCE = re.compile(r"```(?:json)?\s*(.*?)```", re.DOTALL)
 
 
-def _parse_facts_json(raw: str) -> dict[str, str]:
+def _parse_facts_json(raw: str, allowed_keys: frozenset[str]) -> dict[str, str]:
     """Extract a JSON object from the LLM response, tolerating markdown fences."""
     text = raw.strip()
     m = _JSON_FENCE.search(text)
@@ -66,7 +66,7 @@ def _parse_facts_json(raw: str) -> dict[str, str]:
     return {
         k: str(v).strip()
         for k, v in data.items()
-        if isinstance(k, str) and k in KNOWN_KEYS and v and str(v).strip()
+        if isinstance(k, str) and k in allowed_keys and v and str(v).strip()
     }
 
 
@@ -74,13 +74,23 @@ def _build_extraction_messages(
     recent_messages: list[dict[str, str]],
     existing_facts: dict[str, str],
     language: str,
+    extra_keys: list[tuple[str, str]] | None = None,
 ) -> list[dict[str, str]]:
-    """Build LLM prompt for fact extraction."""
+    """Build LLM prompt for fact extraction.
 
-    keys_hint = (
+    extra_keys: list of (key, label) for owner-defined custom categories.
+    They are appended to keys_hint so the LLM knows to extract them too.
+    """
+
+    builtin_hint = (
         "name, age, birthday, city, country, occupation, workplace, "
         "interests, relationship, family, language, notes"
     )
+    if extra_keys:
+        custom_hint = ", ".join(f"{k} ({lbl})" for k, lbl in extra_keys)
+        keys_hint = f"{builtin_hint}, {custom_hint}"
+    else:
+        keys_hint = builtin_hint
 
     if language == "ru":
         system = (
@@ -141,6 +151,7 @@ class ContactFactsService:
         settings_service: SettingsService,
         refresh_interval: int,
         enabled: bool,
+        categories_service=None,
     ) -> None:
         self.repository = repository
         self.memory_service = memory_service
@@ -148,8 +159,14 @@ class ContactFactsService:
         self.settings_service = settings_service
         self.refresh_interval = max(1, refresh_interval)
         self.enabled = enabled
+        self.categories_service = categories_service
         self._in_progress: set[int] = set()
         self._tasks: set[asyncio.Task[None]] = set()
+
+    def _allowed_keys(self) -> frozenset[str]:
+        """Return the union of built-in and owner-defined custom keys."""
+        custom = self.categories_service.list_keys() if self.categories_service else set()
+        return frozenset(KNOWN_KEYS | custom)
 
     # ------------------------------------------------------------------
     # Public API
@@ -162,8 +179,9 @@ class ContactFactsService:
         return {f.key: f.value for f in self.get_facts(user_id)}
 
     def set_fact(self, user_id: int, key: str, value: str) -> None:
-        if key not in KNOWN_KEYS:
-            raise ValueError(f"Unknown fact key: {key!r}. Allowed: {sorted(KNOWN_KEYS)}")
+        allowed = self._allowed_keys()
+        if key not in allowed:
+            raise ValueError(f"Unknown fact key: {key!r}. Allowed: {sorted(allowed)}")
         self.repository.set_fact(user_id, key, value)
 
     def delete_fact(self, user_id: int, key: str) -> None:
@@ -214,13 +232,20 @@ class ContactFactsService:
 
         existing = self.facts_as_dict(user_id)
         language = self.settings_service.get_language(user_id)
+        extra_categories = (
+            [(c["key"], c["label"]) for c in self.categories_service.list_categories()]
+            if self.categories_service
+            else None
+        )
+        allowed_keys = self._allowed_keys()
         prompt = _build_extraction_messages(
             [{"role": m.role, "content": m.content} for m in recent],
             existing,
             language,
+            extra_keys=extra_categories,
         )
         raw = (await self.llm_service.complete(prompt)).strip()
-        new_facts = _parse_facts_json(raw)
+        new_facts = _parse_facts_json(raw, allowed_keys)
 
         # Merge: update known keys, never delete previously extracted ones
         for key, value in new_facts.items():

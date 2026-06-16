@@ -9,6 +9,7 @@ import pytest
 
 from app.database.db import Database
 from app.services.contact_facts_service import (
+    KNOWN_KEYS,
     ContactFactsService,
     _parse_facts_json,
 )
@@ -16,6 +17,7 @@ from app.services.memory_service import MemoryService
 from app.services.settings_service import SettingsService
 
 OWNER_ID = 100000001
+_ALLOWED = frozenset(KNOWN_KEYS)
 
 
 def _make(tmp_path, *, interval=5, enabled=True, llm_return=None):
@@ -53,19 +55,19 @@ def _fill(memory: MemoryService, user_id: int, n: int) -> None:
 
 def test_parse_plain_json() -> None:
     raw = '{"name": "Саша", "city": "Москва"}'
-    result = _parse_facts_json(raw)
+    result = _parse_facts_json(raw, _ALLOWED)
     assert result == {"name": "Саша", "city": "Москва"}
 
 
 def test_parse_fenced_json() -> None:
     raw = "```json\n{\"name\": \"Ivan\", \"occupation\": \"дизайнер\"}\n```"
-    result = _parse_facts_json(raw)
+    result = _parse_facts_json(raw, _ALLOWED)
     assert result == {"name": "Ivan", "occupation": "дизайнер"}
 
 
 def test_parse_ignores_unknown_keys() -> None:
     raw = '{"name": "Петя", "secret_key": "oops", "city": "Минск"}'
-    result = _parse_facts_json(raw)
+    result = _parse_facts_json(raw, _ALLOWED)
     assert "secret_key" not in result
     assert result["name"] == "Петя"
     assert result["city"] == "Минск"
@@ -73,14 +75,14 @@ def test_parse_ignores_unknown_keys() -> None:
 
 def test_parse_ignores_empty_values() -> None:
     raw = '{"name": "Ира", "city": ""}'
-    result = _parse_facts_json(raw)
+    result = _parse_facts_json(raw, _ALLOWED)
     assert "city" not in result
 
 
 def test_parse_invalid_returns_empty() -> None:
-    assert _parse_facts_json("not json at all") == {}
-    assert _parse_facts_json("{}") == {}
-    assert _parse_facts_json("[]") == {}
+    assert _parse_facts_json("not json at all", _ALLOWED) == {}
+    assert _parse_facts_json("{}", _ALLOWED) == {}
+    assert _parse_facts_json("[]", _ALLOWED) == {}
 
 
 # ---------------------------------------------------------------------------

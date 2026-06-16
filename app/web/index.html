@@ -652,6 +652,23 @@
         <button class="btn" onclick="saveGlobalSetting()">Сохранить</button>
       </div>
     </div>
+    <div class="card">
+      <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
+        <span>Свои категории фактов</span>
+      </div>
+      <div style="font-size:11px;color:var(--hint);margin-bottom:8px">
+        Глобальные кастомные поля (ключ + подпись). ИИ будет автоматически их заполнять из переписки.
+        Встроенные: имя, возраст, день рождения, город, страна, профессия, работа, интересы, отношения, семья, язык, заметки.
+      </div>
+      <div id="fact-categories-list"><div class="spinner">Загрузка...</div></div>
+      <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px">
+        <div class="row">
+          <input type="text" id="fc-key-input" placeholder="ключ (напр. pet_name)" style="flex:1">
+          <input type="text" id="fc-label-input" placeholder="Подпись (напр. Кличка питомца)" style="flex:2">
+        </div>
+        <button class="btn btn-sm" onclick="addFactCategory()" style="width:auto">+ Добавить категорию</button>
+      </div>
+    </div>
   </div>
 
 </main>
@@ -854,6 +871,13 @@ async function openContact(userId) {
     try { presets = await get('/admin/presets'); } catch {}
   }
   renderPresetGrid();
+
+  // populate fact-key dropdown with custom categories
+  try {
+    const cats = await get('/admin/fact-categories');
+    updateFactKeyDropdown(cats);
+  } catch {}
+
 
   // load user detail
   try {
@@ -1456,6 +1480,7 @@ async function saveBusinessReplyMode() {
 
 async function loadGlobalSettings() {
   loadGlobalBusinessReplyMode();
+  loadFactCategories();
   const el = document.getElementById('global-settings-list');
   try {
     const settings = await get('/admin/settings');
@@ -1486,6 +1511,69 @@ async function saveGlobalSetting() {
   } catch(e) {
     tg.showAlert('Ошибка: ' + e.message);
   }
+}
+
+// ── Custom fact categories ────────────────────────────────────────────────────
+
+async function loadFactCategories() {
+  const el = document.getElementById('fact-categories-list');
+  if (!el) return;
+  try {
+    const cats = await get('/admin/fact-categories');
+    if (!cats.length) {
+      el.innerHTML = '<div class="empty">Кастомных категорий пока нет</div>';
+    } else {
+      el.innerHTML = cats.map(c =>
+        `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <span style="font-size:13px"><b>${escHtml(c.key)}</b> — ${escHtml(c.label)}</span>
+          <button class="btn btn-sm btn-secondary" onclick="deleteFactCategory('${escHtml(c.key)}')"
+            style="width:auto;font-size:11px;flex-shrink:0">✕</button>
+        </div>`
+      ).join('');
+    }
+    updateFactKeyDropdown(cats);
+  } catch(e) {
+    if (el) el.innerHTML = `<div class="error">${e.message}</div>`;
+  }
+}
+
+async function addFactCategory() {
+  const key   = document.getElementById('fc-key-input').value.trim();
+  const label = document.getElementById('fc-label-input').value.trim();
+  if (!key || !label) { tg.showAlert?.('Заполни ключ и подпись'); return; }
+  try {
+    await post('/admin/fact-categories', { key, label });
+    document.getElementById('fc-key-input').value = '';
+    document.getElementById('fc-label-input').value = '';
+    toast('Категория добавлена');
+    loadFactCategories();
+  } catch(e) {
+    tg.showAlert?.('Ошибка: ' + e.message);
+  }
+}
+
+async function deleteFactCategory(key) {
+  try {
+    await del('/admin/fact-categories/' + encodeURIComponent(key));
+    toast('Категория удалена');
+    loadFactCategories();
+  } catch(e) {
+    tg.showAlert?.('Ошибка: ' + e.message);
+  }
+}
+
+function updateFactKeyDropdown(customCats) {
+  const sel = document.getElementById('fact-key-select');
+  if (!sel) return;
+  // Remove previously added custom options (data-custom="1")
+  sel.querySelectorAll('[data-custom]').forEach(o => o.remove());
+  customCats.forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c.key;
+    opt.textContent = c.label;
+    opt.dataset.custom = '1';
+    sel.appendChild(opt);
+  });
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

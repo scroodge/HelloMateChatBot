@@ -16,6 +16,7 @@ from app.api.auth import validate_init_data
 from app.database.repositories.events import EventRepository
 from app.services.contact_facts_service import ContactFactsService
 from app.services.examples_service import ContactExamplesService
+from app.services.fact_categories_service import FactCategoriesService
 from app.services.greeting_rules_service import GreetingRulesService
 from app.services.greeting_service import GreetingService
 from app.services.memory_service import MemoryService
@@ -63,6 +64,11 @@ class ContactFactWriteRequest(BaseModel):
     value: str
 
 
+class FactCategoryWriteRequest(BaseModel):
+    key: str
+    label: str
+
+
 class ContactExampleWriteRequest(BaseModel):
     contact_message: str
     reply_text: str
@@ -94,6 +100,7 @@ def create_admin_router(
     greeting_rules_service: GreetingRulesService,
     event_repository: EventRepository | None = None,
     facts_service: ContactFactsService | None = None,
+    fact_categories_service: FactCategoriesService | None = None,
     examples_service: ContactExamplesService | None = None,
     suggestions_service: SuggestionsService | None = None,
     *,
@@ -529,6 +536,42 @@ def create_admin_router(
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         suggestions_service.mark_saved(suggestion_id)
         return {"pending": suggestions_service.count_pending()}
+
+    # -----------------------------------------------------------------------
+    # Custom fact categories (global, owner-defined)
+    # -----------------------------------------------------------------------
+
+    @router.get("/fact-categories")
+    async def list_fact_categories(caller_id: int = AdminUser) -> list[dict[str, str]]:
+        """Return all owner-defined custom fact categories."""
+        if fact_categories_service is None:
+            return []
+        return fact_categories_service.list_categories()
+
+    @router.post("/fact-categories")
+    async def add_fact_category(
+        request: FactCategoryWriteRequest, caller_id: int = AdminUser
+    ) -> list[dict[str, str]]:
+        """Add a custom fact category (global, LLM will auto-extract it)."""
+        if fact_categories_service is None:
+            raise HTTPException(status_code=503, detail="Fact categories service not enabled")
+        try:
+            fact_categories_service.add_category(request.key, request.label)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return fact_categories_service.list_categories()
+
+    @router.delete("/fact-categories/{key}")
+    async def delete_fact_category(key: str, caller_id: int = AdminUser) -> list[dict[str, str]]:
+        """Delete a custom fact category (does not delete already-stored facts)."""
+        if fact_categories_service is None:
+            raise HTTPException(status_code=503, detail="Fact categories service not enabled")
+        from app.services.contact_facts_service import KNOWN_KEYS
+
+        if key in KNOWN_KEYS:
+            raise HTTPException(status_code=422, detail="Cannot delete a built-in fact key.")
+        fact_categories_service.delete_category(key)
+        return fact_categories_service.list_categories()
 
     # -----------------------------------------------------------------------
     # 12: Learned owner style

@@ -19,6 +19,7 @@ from app.database.repositories.business import BusinessRepositoryImpl
 from app.database.repositories.documents import DocumentRepositoryImpl
 from app.database.repositories.events import EventRepositoryImpl
 from app.database.repositories.examples import ContactExamplesRepositoryImpl
+from app.database.repositories.fact_categories import FactCategoriesRepositoryImpl
 from app.database.repositories.facts import ContactFactsRepositoryImpl
 from app.database.repositories.greeting import GreetingRepositoryImpl
 from app.database.repositories.greeting_rules import GreetingRulesRepositoryImpl
@@ -41,6 +42,7 @@ class Database:
         self.examples = ContactExamplesRepositoryImpl(self)
         self.suggestions = SuggestionsRepositoryImpl(self)
         self.facts = ContactFactsRepositoryImpl(self)
+        self.fact_categories = FactCategoriesRepositoryImpl(self)
         self.greetings = GreetingRepositoryImpl(self)
         self.greeting_rules = GreetingRulesRepositoryImpl(self)
         self.settings = SettingsRepositoryImpl(self)

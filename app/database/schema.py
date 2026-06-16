@@ -235,6 +235,14 @@ recall_index_meta = Table(
     Column("updated_at", Text, nullable=False),
 )
 
+fact_categories = Table(
+    "fact_categories",
+    metadata,
+    Column("key", Text, primary_key=True),
+    Column("label", Text, nullable=False),
+    Column("created_at", Text, nullable=False),
+)
+
 user_greeting_rules = Table(
     "user_greeting_rules",
     metadata,

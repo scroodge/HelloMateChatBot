@@ -14,6 +14,7 @@ from app.config import Config
 from app.database.db import Database
 from app.services.contact_facts_service import ContactFactsService
 from app.services.examples_service import ContactExamplesService
+from app.services.fact_categories_service import FactCategoriesService
 from app.services.greeting_rules_service import GreetingRulesService
 from app.services.greeting_service import GreetingService
 from app.services.memory_service import MemoryService
@@ -67,6 +68,7 @@ def create_api_app(config: Config, database: Database) -> FastAPI:
         chunk_size=config.rag_chunk_size,
         top_k=config.rag_top_k,
     )
+    fact_categories_service = FactCategoriesService(database.fact_categories)
     facts_service = ContactFactsService(
         repository=database.facts,
         memory_service=memory_service,
@@ -74,6 +76,7 @@ def create_api_app(config: Config, database: Database) -> FastAPI:
         settings_service=settings_service,
         refresh_interval=config.facts_refresh_interval,
         enabled=config.facts_enabled and config.ai_replies_enabled,
+        categories_service=fact_categories_service,
     )
     examples_service = ContactExamplesService(database.examples)
     suggestions_service = SuggestionsService(database.suggestions)
@@ -118,6 +121,7 @@ def create_api_app(config: Config, database: Database) -> FastAPI:
             greeting_rules_service=greeting_rules_service,
             event_repository=database.events,
             facts_service=facts_service,
+            fact_categories_service=fact_categories_service,
             examples_service=examples_service,
             suggestions_service=suggestions_service,
             mini_app_dev=config.mini_app_dev,

@@ -57,6 +57,7 @@ from app.services.conversation_starter_service import ConversationStarterService
 from app.services.embedding_service import EmbeddingService
 from app.services.event_service import EventService
 from app.services.examples_service import ContactExamplesService
+from app.services.fact_categories_service import FactCategoriesService
 from app.services.greeting_rules_service import GreetingRulesService
 from app.services.greeting_service import GreetingService
 from app.services.llm import LLMService
@@ -137,6 +138,7 @@ def build_application(config: Config, database: Database):
         max_chars=config.summary_max_chars,
         enabled=config.summary_enabled and config.ai_replies_enabled,
     )
+    fact_categories_service = FactCategoriesService(database.fact_categories)
     facts_service = ContactFactsService(
         repository=database.facts,
         memory_service=memory_service,
@@ -144,6 +146,7 @@ def build_application(config: Config, database: Database):
         settings_service=settings_service,
         refresh_interval=config.facts_refresh_interval,
         enabled=config.facts_enabled and config.ai_replies_enabled,
+        categories_service=fact_categories_service,
     )
     examples_service = ContactExamplesService(database.examples)
     suggestions_service = SuggestionsService(database.suggestions)
