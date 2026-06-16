@@ -223,6 +223,7 @@ chmod +x update.sh
 | `LLM_EMBEDDING_MODEL` | `bge-m3:latest` | Embedding model for RAG (`/remember`) and semantic recall |
 | `LLM_API_KEY` | empty | API key for cloud provider |
 | `LLM_MAX_TOKENS` | `512` | Max response tokens |
+| `LLM_TEMPERATURE` | `0.7` | Sampling temperature (0.0–2.0); lower = more focused, less rambling |
 | `AI_REPLIES_ENABLED` | `false` | Enable AI replies after greeting |
 | `MINI_APP_URL` | empty | HTTPS Mini App URL |
 | `MINI_APP_DEV` | `false` | Start API locally without HTTPS; open `http://127.0.0.1:8080` in a browser |

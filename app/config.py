@@ -52,6 +52,7 @@ class Config:
     llm_embedding_model: str
     llm_api_key: str
     llm_max_tokens: int
+    llm_temperature: float
     ai_replies_enabled: bool
     mini_app_url: str
     mini_app_dev: bool
@@ -123,6 +124,9 @@ class Config:
         llm_embedding_model = os.getenv("LLM_EMBEDDING_MODEL", "bge-m3:latest").strip()
         llm_api_key = os.getenv("LLM_API_KEY", "").strip()
         llm_max_tokens = int(os.getenv("LLM_MAX_TOKENS", "512"))
+        llm_temperature = float(os.getenv("LLM_TEMPERATURE", "0.7"))
+        if not 0.0 <= llm_temperature <= 2.0:
+            raise ConfigError("LLM_TEMPERATURE must be between 0.0 and 2.0.")
         ai_replies_enabled = _parse_bool(os.getenv("AI_REPLIES_ENABLED", "false"))
 
         mini_app_url = os.getenv("MINI_APP_URL", "").strip()
@@ -195,6 +199,7 @@ class Config:
             llm_embedding_model=llm_embedding_model,
             llm_api_key=llm_api_key,
             llm_max_tokens=llm_max_tokens,
+            llm_temperature=llm_temperature,
             ai_replies_enabled=ai_replies_enabled,
             mini_app_url=mini_app_url,
             mini_app_dev=mini_app_dev,

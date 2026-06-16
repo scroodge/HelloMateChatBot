@@ -16,9 +16,11 @@ def build_llm_provider(config: Config) -> OllamaProvider | OpenAIProvider:
             model=config.llm_model,
             api_key=config.llm_api_key,
             max_tokens=config.llm_max_tokens,
+            temperature=config.llm_temperature,
         )
     return OllamaProvider(
         base_url=config.llm_base_url,
         model=config.llm_model,
         max_tokens=config.llm_max_tokens,
+        temperature=config.llm_temperature,
     )

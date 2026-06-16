@@ -8,17 +8,29 @@ import httpx
 class OllamaProvider:
     """Call a local or remote Ollama server."""
 
-    def __init__(self, base_url: str, model: str, max_tokens: int) -> None:
+    # Stop the model from continuing into a fabricated next turn. The few-shot
+    # block and labelled context can otherwise tempt a weak model to keep going
+    # ("Контакт: …" / "Ответ: …") or emit meta-instructions to itself.
+    _STOP = ["\nКонтакт:", "\nContact:", "\nОтвет:", "\nReply:"]
+
+    def __init__(
+        self, base_url: str, model: str, max_tokens: int, temperature: float = 0.7
+    ) -> None:
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.max_tokens = max_tokens
+        self.temperature = temperature
 
     async def complete(self, messages: list[dict[str, str]]) -> str:
         payload = {
             "model": self.model,
             "messages": messages,
             "stream": False,
-            "options": {"num_predict": self.max_tokens},
+            "options": {
+                "num_predict": self.max_tokens,
+                "temperature": self.temperature,
+                "stop": self._STOP,
+            },
         }
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(f"{self.base_url}/api/chat", json=payload)

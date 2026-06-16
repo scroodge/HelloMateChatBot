@@ -25,6 +25,33 @@ def _contains_cjk(text: str) -> bool:
     return bool(_CJK_PATTERN.search(text))
 
 
+# Meta-instruction leakage: a weak model sometimes appends a self-directed
+# revision request or AI-disclaimer after the actual reply (e.g. "...can you
+# please modify the response to fit the persona and guidelines provided..."),
+# or an English instruction tail. We cut the reply at the first such marker.
+_META_LEAK = re.compile(
+    r"(can you (?:please|kindly)|could you (?:please|kindly)|"
+    r"please (?:modify|rewrite|revise|adjust|change|note)|"
+    r"(?:modify|rewrite|revise) the (?:response|reply|message|text)|"
+    r"to fit the persona|guidelines provided|"
+    r"as an ai|i am an ai|i'?m an ai|language model|"
+    r"without including|here'?s the (?:revised|modified|updated)|"
+    r"\[/?(?:inst|system|user|assistant)\]|<\|.*?\|>)",
+    re.IGNORECASE,
+)
+
+
+def _sanitize_reply(text: str) -> str:
+    """Strip trailing meta-instruction / role-leak text from a model reply."""
+
+    match = _META_LEAK.search(text)
+    if match is None:
+        return text
+    cut = text[: match.start()].rstrip(" ,;:-\u2014\n\t\"'\u00ab\u00bb()")
+    logger.warning("Stripped leaked meta-text from reply (kept %d/%d chars)", len(cut), len(text))
+    return cut.strip() or text.strip()
+
+
 def build_persona_prompt(language: str, display_name: str | None = None) -> str:
     """Build a system prompt that makes replies feel like the user's own voice."""
 
@@ -141,6 +168,7 @@ class ReplyService:
             reply = await self.llm_service.complete(messages)
             if _contains_cjk(reply):
                 reply = await self._rewrite_without_cjk(messages, reply, language)
+            reply = _sanitize_reply(reply)
             self.memory_service.record_assistant_message(user_id, reply, authored_by="bot")
             return reply
         except Exception:
@@ -164,7 +192,7 @@ class ReplyService:
             reply = await self.llm_service.complete(messages)
             if _contains_cjk(reply):
                 reply = await self._rewrite_without_cjk(messages, reply, language)
-            return reply
+            return _sanitize_reply(reply)
         except Exception:
             logger.exception("Failed to draft reply for user %s", user_id)
             return None
@@ -189,7 +217,7 @@ class ReplyService:
             messages[0] = {"role": "system", "content": system_prompt_override}
         t0 = time.monotonic()
         try:
-            reply = await self.llm_service.complete(messages)
+            reply = _sanitize_reply(await self.llm_service.complete(messages))
         except Exception:
             logger.exception("Preview reply failed for user %s", user_id)
             reply = translate("ai_unavailable", language)

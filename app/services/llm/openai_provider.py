@@ -8,11 +8,16 @@ import httpx
 class OpenAIProvider:
     """Call an OpenAI-compatible chat completions API."""
 
-    def __init__(self, base_url: str, model: str, api_key: str, max_tokens: int) -> None:
+    _STOP = ["\nКонтакт:", "\nContact:", "\nОтвет:", "\nReply:"]
+
+    def __init__(
+        self, base_url: str, model: str, api_key: str, max_tokens: int, temperature: float = 0.7
+    ) -> None:
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.api_key = api_key
         self.max_tokens = max_tokens
+        self.temperature = temperature
 
     async def complete(self, messages: list[dict[str, str]]) -> str:
         if not self.api_key:
@@ -22,6 +27,8 @@ class OpenAIProvider:
             "model": self.model,
             "messages": messages,
             "max_tokens": self.max_tokens,
+            "temperature": self.temperature,
+            "stop": self._STOP,
         }
         headers = {"Authorization": f"Bearer {self.api_key}"}
         async with httpx.AsyncClient(timeout=60.0) as client:
