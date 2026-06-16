@@ -18,7 +18,9 @@ class ContactExamplesRepository:
     def list_examples(self, user_id: int) -> list[ContactExample]:
         raise NotImplementedError
 
-    def add_example(self, user_id: int, contact_message: str, reply_text: str) -> ContactExample:
+    def add_example(
+        self, user_id: int, contact_message: str, reply_text: str, kind: str = "positive"
+    ) -> ContactExample:
         raise NotImplementedError
 
     def delete_example(self, user_id: int, example_id: int) -> None:
@@ -28,6 +30,9 @@ class ContactExamplesRepository:
         raise NotImplementedError
 
     def count_examples(self, user_id: int) -> int:
+        raise NotImplementedError
+
+    def count_by_kind(self, user_id: int, kind: str) -> int:
         raise NotImplementedError
 
     def global_stats(self) -> tuple[int, int]:
@@ -51,12 +56,15 @@ class ContactExamplesRepositoryImpl(ContactExamplesRepository):
                 user_id=int(row.user_id),
                 contact_message=row.contact_message,
                 reply_text=row.reply_text,
+                kind=row.kind if hasattr(row, "kind") else "positive",
                 created_at=datetime.fromisoformat(row.created_at),
             )
             for row in rows
         ]
 
-    def add_example(self, user_id: int, contact_message: str, reply_text: str) -> ContactExample:
+    def add_example(
+        self, user_id: int, contact_message: str, reply_text: str, kind: str = "positive"
+    ) -> ContactExample:
         now = datetime.now().astimezone()
         with self._db.engine.begin() as conn:
             result = conn.execute(
@@ -64,6 +72,7 @@ class ContactExamplesRepositoryImpl(ContactExamplesRepository):
                     user_id=user_id,
                     contact_message=contact_message,
                     reply_text=reply_text,
+                    kind=kind,
                     created_at=now.isoformat(),
                 )
             )
@@ -73,6 +82,7 @@ class ContactExamplesRepositoryImpl(ContactExamplesRepository):
             user_id=user_id,
             contact_message=contact_message,
             reply_text=reply_text,
+            kind=kind,
             created_at=now,
         )
 
@@ -96,6 +106,19 @@ class ContactExamplesRepositoryImpl(ContactExamplesRepository):
                     select(func.count())
                     .select_from(contact_examples)
                     .where(contact_examples.c.user_id == user_id)
+                ).scalar_one()
+            )
+
+    def count_by_kind(self, user_id: int, kind: str) -> int:
+        with self._db.engine.connect() as conn:
+            return int(
+                conn.execute(
+                    select(func.count())
+                    .select_from(contact_examples)
+                    .where(
+                        contact_examples.c.user_id == user_id,
+                        contact_examples.c.kind == kind,
+                    )
                 ).scalar_one()
             )
 

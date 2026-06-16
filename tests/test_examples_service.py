@@ -111,6 +111,75 @@ def test_examples_block_disabled(tmp_path) -> None:
         assert svc.examples_block(1, "ru") == ""
 
 
+# ── Negative examples (kind='negative') ────────────────────────────────────────
+
+
+def test_add_negative_example(tmp_path) -> None:
+    svc, db = _make_service(tmp_path)
+    with db:
+        ex = svc.add_example(1, "привет", "давай позже", kind="negative")
+        assert ex.kind == "negative"
+        items = svc.list_examples(1)
+        assert len(items) == 1
+        assert items[0].kind == "negative"
+
+
+def test_invalid_kind_rejected(tmp_path) -> None:
+    svc, db = _make_service(tmp_path)
+    with db:
+        with pytest.raises(ValueError, match="kind must be"):
+            svc.add_example(1, "привет", "ответ", kind="unknown")
+
+
+def test_caps_are_per_kind(tmp_path) -> None:
+    """Positive cap and negative cap are independent — 10+10 allowed."""
+    svc, db = _make_service(tmp_path)
+    with db:
+        for i in range(MAX_EXAMPLES):
+            svc.add_example(1, f"pos {i}", f"reply {i}", kind="positive")
+        for i in range(MAX_EXAMPLES):
+            svc.add_example(1, f"neg {i}", f"bad {i}", kind="negative")
+        # Both caps hit — one more of each should fail
+        with pytest.raises(ValueError, match="At most"):
+            svc.add_example(1, "x", "y", kind="positive")
+        with pytest.raises(ValueError, match="At most"):
+            svc.add_example(1, "x", "y", kind="negative")
+
+
+def test_examples_block_negative_only(tmp_path) -> None:
+    svc, db = _make_service(tmp_path)
+    with db:
+        svc.add_example(1, "привет", "да ладно", kind="negative")
+        block = svc.examples_block(1, "ru")
+        assert "НЕ надо" in block
+        assert "Плохой ответ: «да ладно»" in block
+        assert "Примеры идеальных" not in block
+
+
+def test_examples_block_both_kinds_ru(tmp_path) -> None:
+    svc, db = _make_service(tmp_path)
+    with db:
+        svc.add_example(1, "привет", "о, привет!")
+        svc.add_example(1, "пока", "давай потом", kind="negative")
+        block = svc.examples_block(1, "ru")
+        assert "Примеры идеальных ответов" in block
+        assert "Ответ: «о, привет!»" in block
+        assert "НЕ надо" in block
+        assert "Плохой ответ: «давай потом»" in block
+
+
+def test_examples_block_both_kinds_en(tmp_path) -> None:
+    svc, db = _make_service(tmp_path)
+    with db:
+        svc.add_example(1, "hi", "hey there!")
+        svc.add_example(1, "bye", "later maybe", kind="negative")
+        block = svc.examples_block(1, "en")
+        assert "Examples of ideal replies" in block
+        assert "Reply: «hey there!»" in block
+        assert "Do NOT reply like this" in block
+        assert "Bad reply: «later maybe»" in block
+
+
 @pytest.mark.asyncio
 async def test_examples_injected_into_reply_prompt(tmp_path) -> None:
     """The few-shot block must land in the system prompt of the assembled messages."""

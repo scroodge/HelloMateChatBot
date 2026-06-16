@@ -66,12 +66,14 @@ class ContactFactWriteRequest(BaseModel):
 class ContactExampleWriteRequest(BaseModel):
     contact_message: str
     reply_text: str
+    kind: str = "positive"  # "positive" | "negative"
 
 
 class SuggestionSaveRequest(BaseModel):
     # Optional edits before saving the suggestion as a few-shot example.
     contact_message: str | None = None
     reply_text: str | None = None
+    kind: str = "positive"  # "positive" | "negative"
 
 
 # ---------------------------------------------------------------------------
@@ -201,6 +203,7 @@ def create_admin_router(
                     "id": ex.id,
                     "contact_message": ex.contact_message,
                     "reply_text": ex.reply_text,
+                    "kind": ex.kind,
                 }
                 for ex in examples_service.list_examples(user_id)
             ]
@@ -428,6 +431,7 @@ def create_admin_router(
                 "id": ex.id,
                 "contact_message": ex.contact_message,
                 "reply_text": ex.reply_text,
+                "kind": ex.kind,
             }
             for ex in examples_service.list_examples(user_id)
         ]
@@ -447,7 +451,9 @@ def create_admin_router(
         if examples_service is None:
             raise HTTPException(status_code=503, detail="Examples service not enabled")
         try:
-            examples_service.add_example(user_id, request.contact_message, request.reply_text)
+            examples_service.add_example(
+                user_id, request.contact_message, request.reply_text, request.kind
+            )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         return _examples_payload(user_id)
@@ -516,7 +522,9 @@ def create_admin_router(
         contact_message = request.contact_message or suggestion.contact_message
         reply_text = request.reply_text or suggestion.draft_text
         try:
-            examples_service.add_example(suggestion.user_id, contact_message, reply_text)
+            examples_service.add_example(
+                suggestion.user_id, contact_message, reply_text, request.kind
+            )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         suggestions_service.mark_saved(suggestion_id)

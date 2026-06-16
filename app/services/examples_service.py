@@ -1,9 +1,12 @@
-"""Per-contact few-shot examples — curated (message -> ideal reply) pairs.
+"""Per-contact few-shot examples — curated (message -> reply) pairs.
 
 Unlike facts/summary/style, this is a purely manual, owner-curated signal: no
 LLM extraction, no background jobs. The owner saves a handful of ideal replies
 (e.g. from the Playground) and they are injected into the prompt as a few-shot
 guide so the model copies the desired tone and format.
+
+Negative examples (kind='negative') are anti-patterns: the model is told to
+avoid the tone and phrasing in those pairs.
 """
 
 from __future__ import annotations
@@ -15,12 +18,14 @@ from app.models.examples import ContactExample
 
 logger = logging.getLogger(__name__)
 
-# Hard cap so the prompt never bloats. Few-shot benefit plateaus quickly; a
-# handful of good examples is plenty and keeps latency/cost bounded.
+# Hard cap per kind so the prompt never bloats. Few-shot benefit plateaus
+# quickly; a handful of good examples is plenty and keeps latency/cost bounded.
 MAX_EXAMPLES = 10
 
 # Truncate each side so a single pasted wall of text can't dominate the prompt.
 MAX_FIELD_CHARS = 600
+
+_VALID_KINDS = {"positive", "negative"}
 
 
 class ContactExamplesService:
@@ -33,14 +38,18 @@ class ContactExamplesService:
     def list_examples(self, user_id: int) -> list[ContactExample]:
         return self.repository.list_examples(user_id)
 
-    def add_example(self, user_id: int, contact_message: str, reply_text: str) -> ContactExample:
+    def add_example(
+        self, user_id: int, contact_message: str, reply_text: str, kind: str = "positive"
+    ) -> ContactExample:
+        if kind not in _VALID_KINDS:
+            raise ValueError(f"kind must be one of {_VALID_KINDS!r}, got {kind!r}.")
         contact_message = contact_message.strip()[:MAX_FIELD_CHARS]
         reply_text = reply_text.strip()[:MAX_FIELD_CHARS]
         if not contact_message or not reply_text:
             raise ValueError("Both contact_message and reply_text are required.")
-        if self.repository.count_examples(user_id) >= MAX_EXAMPLES:
-            raise ValueError(f"At most {MAX_EXAMPLES} examples per contact.")
-        return self.repository.add_example(user_id, contact_message, reply_text)
+        if self.repository.count_by_kind(user_id, kind) >= MAX_EXAMPLES:
+            raise ValueError(f"At most {MAX_EXAMPLES} {kind} examples per contact.")
+        return self.repository.add_example(user_id, contact_message, reply_text, kind)
 
     def delete_example(self, user_id: int, example_id: int) -> None:
         self.repository.delete_example(user_id, example_id)
@@ -56,27 +65,47 @@ class ContactExamplesService:
         """Return a system-prompt block of few-shot examples, or '' if none."""
         if not self.enabled:
             return ""
-        examples = self.repository.list_examples(user_id)[:MAX_EXAMPLES]
-        if not examples:
+        all_examples = self.repository.list_examples(user_id)
+        positives = [e for e in all_examples if e.kind == "positive"][:MAX_EXAMPLES]
+        negatives = [e for e in all_examples if e.kind == "negative"][:MAX_EXAMPLES]
+        if not positives and not negatives:
             return ""
 
         if language == "ru":
-            header = (
+            pos_header = (
                 " Примеры идеальных ответов (повторяй их стиль, тон и длину, "
                 "но не копируй дословно):"
             )
+            neg_header = (
+                " А так отвечать НЕ надо — избегай такого тона и формулировок:"
+            )
             contact_label, reply_label = "Контакт", "Ответ"
+            bad_reply_label = "Плохой ответ"
         else:
-            header = (
+            pos_header = (
                 " Examples of ideal replies (mirror their style, tone and length, "
                 "but do not copy verbatim):"
             )
+            neg_header = " Do NOT reply like this — avoid this tone and wording:"
             contact_label, reply_label = "Contact", "Reply"
+            bad_reply_label = "Bad reply"
 
-        lines = [header]
-        for i, ex in enumerate(examples, start=1):
-            lines.append(
-                f" {i}. {contact_label}: «{ex.contact_message}» — "
-                f"{reply_label}: «{ex.reply_text}»"
-            )
-        return "".join(lines)
+        parts: list[str] = []
+
+        if positives:
+            parts.append(pos_header)
+            for i, ex in enumerate(positives, start=1):
+                parts.append(
+                    f" {i}. {contact_label}: «{ex.contact_message}» — "
+                    f"{reply_label}: «{ex.reply_text}»"
+                )
+
+        if negatives:
+            parts.append(neg_header)
+            for i, ex in enumerate(negatives, start=1):
+                parts.append(
+                    f" {i}. {contact_label}: «{ex.contact_message}» — "
+                    f"{bad_reply_label}: «{ex.reply_text}»"
+                )
+
+        return "".join(parts)

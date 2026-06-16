@@ -548,8 +548,12 @@
       <div id="detail-examples"><span class="empty">Примеров пока нет</span></div>
       <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px">
         <input type="text" id="example-msg-input" placeholder="Сообщение контакта">
-        <textarea id="example-reply-input" rows="2" placeholder="Идеальный ответ"></textarea>
-        <button class="btn btn-sm" onclick="saveExample()" style="width:auto">+ Добавить пример</button>
+        <textarea id="example-reply-input" rows="2" placeholder="Ответ (идеальный или плохой)"></textarea>
+        <select id="example-kind-select">
+          <option value="positive">✅ Хороший ответ (эталон)</option>
+          <option value="negative">🚫 Плохой ответ (антипример)</option>
+        </select>
+        <button class="btn btn-sm" onclick="saveExample()" style="width:auto">+ Добавить</button>
       </div>
     </div>
 
@@ -1109,25 +1113,43 @@ function renderExamples(examples) {
     el.innerHTML = '<span class="empty">Примеров пока нет — добавь идеальные ответы вручную</span>';
     return;
   }
-  el.innerHTML = examples.map(ex =>
-    `<div class="card" style="background:var(--bg);padding:8px;margin-bottom:6px">
+  const positives = examples.filter(e => e.kind !== 'negative');
+  const negatives = examples.filter(e => e.kind === 'negative');
+
+  function exCard(ex) {
+    const isNeg = ex.kind === 'negative';
+    const bg = isNeg ? 'rgba(255,80,80,0.07)' : 'var(--bg)';
+    const replyLabel = isNeg ? 'Плохой ответ:' : 'Ответ:';
+    return `<div class="card" style="background:${bg};padding:8px;margin-bottom:6px">
       <div style="font-size:11px;color:var(--hint)">Контакт:</div>
       <div style="font-size:13px;margin-bottom:4px">${escHtml(ex.contact_message)}</div>
-      <div style="font-size:11px;color:var(--hint)">Ответ:</div>
+      <div style="font-size:11px;color:var(--hint)">${replyLabel}</div>
       <div style="font-size:13px">${escHtml(ex.reply_text)}</div>
       <button class="btn btn-sm btn-secondary" onclick="deleteExample(${ex.id})"
         style="width:auto;font-size:11px;margin-top:6px">Удалить</button>
-    </div>`
-  ).join('');
+    </div>`;
+  }
+
+  let html = '';
+  if (positives.length) {
+    html += `<div style="font-size:12px;font-weight:600;color:var(--hint);margin:4px 0 6px">✅ Хорошие ответы (эталон)</div>`;
+    html += positives.map(exCard).join('');
+  }
+  if (negatives.length) {
+    html += `<div style="font-size:12px;font-weight:600;color:var(--hint);margin:10px 0 6px">🚫 Плохие ответы (антипримеры)</div>`;
+    html += negatives.map(exCard).join('');
+  }
+  el.innerHTML = html;
 }
 
 async function saveExample() {
   if (!currentUserId) return;
   const contact_message = document.getElementById('example-msg-input').value.trim();
   const reply_text      = document.getElementById('example-reply-input').value.trim();
+  const kind            = document.getElementById('example-kind-select').value;
   if (!contact_message || !reply_text) { tg.showAlert('Заполни оба поля'); return; }
   try {
-    const examples = await post(`/admin/users/${currentUserId}/examples`, { contact_message, reply_text });
+    const examples = await post(`/admin/users/${currentUserId}/examples`, { contact_message, reply_text, kind });
     renderExamples(examples);
     document.getElementById('example-msg-input').value = '';
     document.getElementById('example-reply-input').value = '';
@@ -1187,7 +1209,8 @@ async function loadSuggestions() {
         <textarea id="sugg-text-${s.id}" rows="3" style="margin:4px 0">${escHtml(s.draft_text)}</textarea>
         <div class="row" style="flex-wrap:wrap;gap:6px">
           <button class="btn btn-sm" onclick="copySuggestion(${s.id})" style="width:auto">📋 Копировать</button>
-          <button class="btn btn-sm" onclick="saveSuggestion(${s.id})" style="width:auto">🎯 В эталоны</button>
+          <button class="btn btn-sm" onclick="saveSuggestion(${s.id},'positive')" style="width:auto">🎯 В эталоны</button>
+          <button class="btn btn-sm btn-secondary" onclick="saveSuggestion(${s.id},'negative')" style="width:auto">👎 Антипример</button>
           <button class="btn btn-sm btn-secondary" onclick="dismissSuggestion(${s.id})" style="width:auto">🗑 Скрыть</button>
         </div>
       </div>`;
@@ -1208,13 +1231,13 @@ function copySuggestion(id) {
   }
 }
 
-async function saveSuggestion(id) {
+async function saveSuggestion(id, kind = 'positive') {
   const reply_text = document.getElementById('sugg-text-' + id).value.trim();
   if (!reply_text) { tg.showAlert?.('Пустой ответ'); return; }
   try {
-    const res = await post(`/admin/suggestions/${id}/save`, { reply_text });
+    const res = await post(`/admin/suggestions/${id}/save`, { reply_text, kind });
     removeSuggestionCard(id, res.pending);
-    toast('Сохранено в эталоны');
+    toast(kind === 'negative' ? 'Добавлен антипример' : 'Сохранено в эталоны');
   } catch(e) {
     tg.showAlert?.('Ошибка: ' + e.message);
   }

@@ -208,10 +208,12 @@ contact_examples = Table(
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("user_id", Integer, nullable=False),
-    # An ideal (contact message -> reply) pair, curated by the owner, injected
-    # into the prompt as a few-shot guide for tone/format.
+    # An (contact message -> reply) pair, curated by the owner, injected into
+    # the prompt as a few-shot guide for tone/format.
+    # kind: "positive" = ideal reply to emulate; "negative" = bad reply to avoid.
     Column("contact_message", Text, nullable=False),
     Column("reply_text", Text, nullable=False),
+    Column("kind", Text, nullable=False, default="positive"),
     Column("created_at", Text, nullable=False),
     Index("idx_contact_examples_user", "user_id"),
 )
