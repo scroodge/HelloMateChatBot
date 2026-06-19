@@ -8,6 +8,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from app.auth.admin import is_admin
+from app.handlers.helpers import is_business_update
 from app.handlers.incoming import handle_incoming_text
 from app.services.assistant_service import AssistantService
 from app.services.settings_service import SettingsService
@@ -21,6 +22,8 @@ async def private_text_message(update: Update, context: ContextTypes.DEFAULT_TYP
     if update.effective_chat is None or update.effective_chat.type != "private":
         return
     if update.effective_user is None or update.effective_message is None:
+        return
+    if is_business_update(update):
         return
 
     user_id = update.effective_user.id

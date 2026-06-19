@@ -298,6 +298,44 @@
     #chat-box { min-height: 120px; }
     .latency { font-size: 11px; color: var(--hint); text-align: right; margin-top: 4px; }
 
+    /* ── contact history ── */
+    .history-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .history-count { font-size: 11px; color: var(--hint); }
+    .history-scroll {
+      max-height: min(62dvh, 520px);
+      overflow-y: auto;
+      padding-right: 2px;
+      overscroll-behavior: contain;
+    }
+    .history-load {
+      display: none;
+      margin-bottom: 8px;
+    }
+    .history-message {
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .history-message:last-child { border-bottom: none; }
+    .history-meta {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      color: var(--hint);
+      font-size: 11px;
+      margin-bottom: 3px;
+    }
+    .history-author { font-weight: 600; color: var(--text); }
+    .history-content {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
     /* ── stats ── */
     .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: var(--gap); }
     .stat-card {
@@ -562,8 +600,15 @@
     <div class="subtab" id="dtab-history" style="display:none">
     <!-- recent messages -->
     <div class="card">
-      <div class="card-title">Последние сообщения</div>
-      <div id="detail-messages"><span class="empty">Нет сообщений</span></div>
+      <div class="history-toolbar">
+        <div class="card-title" style="margin-bottom:0">История сообщений</div>
+        <div class="history-count" id="history-count"></div>
+      </div>
+      <button class="btn btn-sm btn-secondary history-load" id="history-load-older"
+        onclick="loadOlderHistory()" style="width:100%">Загрузить раньше</button>
+      <div class="history-scroll" id="history-scroll">
+        <div id="detail-messages"><span class="empty">Открой вкладку, чтобы загрузить историю</span></div>
+      </div>
     </div>
     </div><!-- /dtab-history -->
   </div>
@@ -735,6 +780,15 @@ let topicTags = [];
 let boundaryTags = [];
 let contactsCache = [];
 let personaTab = 'preset';
+let historyState = {
+  userId: null,
+  messages: [],
+  total: 0,
+  hasMore: false,
+  nextBeforeId: null,
+  loading: false,
+  initialized: false,
+};
 
 // ── Nav ──────────────────────────────────────────────────────────────────────
 
@@ -836,6 +890,9 @@ function showDetailTab(name) {
   document.querySelectorAll('#detail-subnav .subnav-btn').forEach(b => {
     b.classList.toggle('active', b.dataset.dtab === name);
   });
+  if (name === 'history' && currentUserId && !historyState.initialized) {
+    loadHistoryPage({ reset: true });
+  }
 }
 
 let _backHandler = null;
@@ -856,6 +913,7 @@ function hideBackButton() {
 
 async function openContact(userId) {
   currentUserId = userId;
+  resetHistoryState(userId);
   topicTags = [];
   boundaryTags = [];
   selectedPreset = null;
@@ -923,19 +981,122 @@ async function openContact(userId) {
     // few-shot examples
     renderExamples(u.examples || []);
 
-    // recent messages
-    const msgs = u.recent_messages || [];
-    document.getElementById('detail-messages').innerHTML = msgs.length
-      ? msgs.map(m => `<div style="margin-bottom:8px">
-          <div style="font-size:11px;color:var(--hint)">${m.role === 'user' ? '👤' : '🤖'} ${new Date(m.created_at).toLocaleString('ru')}</div>
-          <div style="margin-top:2px">${escHtml(m.content)}</div>
-        </div>`).join('<div class="divider"></div>')
-      : '<span class="empty">Нет сообщений</span>';
-
     switchPersonaTab(p.raw_prompt ? 'raw' : 'preset');
   } catch(e) {
     tg.showAlert('Ошибка загрузки контакта: ' + e.message);
   }
+}
+
+function resetHistoryState(userId) {
+  historyState = {
+    userId,
+    messages: [],
+    total: 0,
+    hasMore: false,
+    nextBeforeId: null,
+    loading: false,
+    initialized: false,
+  };
+  const messagesEl = document.getElementById('detail-messages');
+  const countEl = document.getElementById('history-count');
+  const loadBtn = document.getElementById('history-load-older');
+  if (messagesEl) messagesEl.innerHTML = '<span class="empty">Открой вкладку, чтобы загрузить историю</span>';
+  if (countEl) countEl.textContent = '';
+  if (loadBtn) loadBtn.style.display = 'none';
+}
+
+function historyAuthorLabel(message) {
+  if (message.authored_by === 'contact') return 'Контакт';
+  if (message.authored_by === 'owner') return 'Вы';
+  if (message.authored_by === 'bot') return 'AI';
+  return message.role === 'user' ? 'Контакт' : 'Ответ';
+}
+
+function renderHistoryMessages() {
+  const messagesEl = document.getElementById('detail-messages');
+  const countEl = document.getElementById('history-count');
+  const loadBtn = document.getElementById('history-load-older');
+  if (!messagesEl) return;
+
+  if (!historyState.messages.length) {
+    messagesEl.innerHTML = historyState.loading
+      ? '<div class="spinner">Загрузка...</div>'
+      : '<span class="empty">Нет сообщений</span>';
+  } else {
+    messagesEl.innerHTML = historyState.messages.map(m => `
+      <div class="history-message" data-message-id="${m.id}">
+        <div class="history-meta">
+          <span class="history-author">${historyAuthorLabel(m)}</span>
+          <span>${new Date(m.created_at).toLocaleString('ru')}</span>
+        </div>
+        <div class="history-content">${escHtml(m.content)}</div>
+      </div>
+    `).join('');
+  }
+
+  if (countEl) {
+    const shown = historyState.messages.length;
+    countEl.textContent = historyState.total ? `Показано ${shown} из ${historyState.total}` : '';
+  }
+  if (loadBtn) {
+    loadBtn.textContent = historyState.loading ? 'Загрузка...' : 'Загрузить раньше';
+    loadBtn.disabled = historyState.loading || !historyState.hasMore;
+    loadBtn.style.display = historyState.hasMore ? '' : 'none';
+  }
+}
+
+async function loadHistoryPage({ reset = false } = {}) {
+  if (!currentUserId || historyState.loading) return;
+  if (!reset && !historyState.hasMore) return;
+
+  const scrollEl = document.getElementById('history-scroll');
+  const previousHeight = scrollEl ? scrollEl.scrollHeight : 0;
+  const previousTop = scrollEl ? scrollEl.scrollTop : 0;
+
+  historyState.loading = true;
+  historyState.initialized = true;
+  renderHistoryMessages();
+
+  try {
+    const before = reset ? null : historyState.nextBeforeId;
+    const qs = new URLSearchParams({ limit: '30' });
+    if (before) qs.set('before_id', String(before));
+    const payload = await get(`/admin/users/${currentUserId}/messages?${qs.toString()}`);
+
+    if (historyState.userId !== currentUserId) {
+      historyState.loading = false;
+      return;
+    }
+
+    const page = payload.messages || [];
+    historyState.total = payload.total || 0;
+    historyState.hasMore = !!payload.has_more;
+    historyState.nextBeforeId = payload.next_before_id || null;
+    historyState.messages = reset ? page : [...page, ...historyState.messages];
+    historyState.loading = false;
+    renderHistoryMessages();
+
+    if (scrollEl) {
+      if (reset) {
+        scrollEl.scrollTop = scrollEl.scrollHeight;
+      } else {
+        scrollEl.scrollTop = scrollEl.scrollHeight - previousHeight + previousTop;
+      }
+    }
+  } catch(e) {
+    historyState.loading = false;
+    const messagesEl = document.getElementById('detail-messages');
+    if (messagesEl) messagesEl.innerHTML = `<div class="error">Ошибка: ${e.message}</div>`;
+    const loadBtn = document.getElementById('history-load-older');
+    if (loadBtn) {
+      loadBtn.textContent = 'Загрузить раньше';
+      loadBtn.disabled = !historyState.hasMore;
+    }
+  }
+}
+
+function loadOlderHistory() {
+  return loadHistoryPage({ reset: false });
 }
 
 function updatePersonaSourceLabel(source, prompt) {
@@ -1617,6 +1778,15 @@ function updateFactKeyDropdown(customCats) {
 
 function escHtml(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+const historyScrollEl = document.getElementById('history-scroll');
+if (historyScrollEl) {
+  historyScrollEl.addEventListener('scroll', () => {
+    if (historyScrollEl.scrollTop < 80 && historyState.hasMore && !historyState.loading) {
+      loadOlderHistory();
+    }
+  });
 }
 
 // ── Access gate + initial load ───────────────────────────────────────────────

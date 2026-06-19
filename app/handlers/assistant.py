@@ -12,6 +12,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from app.auth.admin import require_admin
+from app.handlers.helpers import is_business_update
 from app.services.assistant_service import AssistantService
 
 logger = logging.getLogger(__name__)
@@ -43,9 +44,11 @@ def _status_line(svc: AssistantService, owner_id: int) -> str:
 
 async def assistant_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /assistant <subcommand>."""
-    if not await require_admin(update, context):
-        return
     if update.effective_message is None or update.effective_user is None:
+        return
+    if is_business_update(update):
+        return
+    if not await require_admin(update, context):
         return
 
     svc = context.bot_data.get("assistant_service")

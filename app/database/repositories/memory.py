@@ -40,6 +40,10 @@ class MemoryRepository(Protocol):
         self, user_id: int, *, offset: int, limit: int
     ) -> list[ConversationMessage]: ...
 
+    def list_messages_before(
+        self, user_id: int, *, before_id: int | None, limit: int
+    ) -> tuple[list[ConversationMessage], bool]: ...
+
     def count_owner_messages(self, user_id: int) -> int: ...
 
     def list_owner_messages_asc(
@@ -203,6 +207,33 @@ class MemoryRepositoryImpl:
             )
             for row in rows
         ]
+
+    def list_messages_before(
+        self, user_id: int, *, before_id: int | None, limit: int
+    ) -> tuple[list[ConversationMessage], bool]:
+        query = select(conversation_messages).where(conversation_messages.c.user_id == user_id)
+        if before_id is not None:
+            query = query.where(conversation_messages.c.id < before_id)
+        query = query.order_by(conversation_messages.c.id.desc()).limit(limit + 1)
+
+        with self._db.engine.connect() as connection:
+            rows = connection.execute(query).all()
+
+        has_more = len(rows) > limit
+        rows = rows[:limit]
+        messages = [
+            ConversationMessage(
+                id=int(row.id),
+                user_id=int(row.user_id),
+                role=row.role,
+                content=row.content,
+                created_at=datetime.fromisoformat(row.created_at),
+                authored_by=getattr(row, "authored_by", None),
+            )
+            for row in rows
+        ]
+        messages.reverse()
+        return messages, has_more
 
     def get_summary(self, user_id: int) -> ConversationSummary | None:
         with self._db.engine.connect() as connection:

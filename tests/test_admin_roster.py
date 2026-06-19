@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from app.api.admin_routes import create_admin_router
 from app.database.db import Database
+from app.models.memory import ConversationMessage
 from app.services.greeting_rules_service import GreetingRulesService
 from app.services.greeting_service import GreetingService
 from app.services.memory_service import MemoryService
@@ -101,3 +102,43 @@ def test_persona_too_long_returns_422_not_500(tmp_path) -> None:
 
     assert resp.status_code == 422
     assert "at most" in resp.json()["detail"]
+
+
+def test_contact_messages_endpoint_pages_by_before_id(tmp_path) -> None:
+    """History endpoint returns stable dynamic-scroll pages for one contact."""
+    from datetime import datetime
+
+    with Database(f"sqlite:///{tmp_path / 'messages.db'}") as db:
+        client, profile_service, _ = _make_client(db)
+        profile_service.get_or_create_profile(5336144564, display_name="милая")
+        saved = [
+            db.memory.add_message(
+                ConversationMessage(
+                    id=0,
+                    user_id=5336144564,
+                    role="user" if i % 2 == 0 else "assistant",
+                    content=f"msg {i}",
+                    created_at=datetime(2026, 6, 19, 12, i),
+                    authored_by="contact" if i % 2 == 0 else "owner",
+                )
+            )
+            for i in range(5)
+        ]
+
+        first = client.get("/api/admin/users/5336144564/messages?limit=2")
+        assert first.status_code == 200
+        first_payload = first.json()
+        assert [m["content"] for m in first_payload["messages"]] == ["msg 3", "msg 4"]
+        assert first_payload["has_more"] is True
+        assert first_payload["next_before_id"] == saved[3].id
+        assert first_payload["total"] == 5
+        assert first_payload["messages"][0]["authored_by"] == "owner"
+
+        second = client.get(
+            f"/api/admin/users/5336144564/messages?limit=2&before_id={first_payload['next_before_id']}"
+        )
+        assert second.status_code == 200
+        second_payload = second.json()
+        assert [m["content"] for m in second_payload["messages"]] == ["msg 1", "msg 2"]
+        assert second_payload["has_more"] is True
+        assert second_payload["next_before_id"] == saved[1].id

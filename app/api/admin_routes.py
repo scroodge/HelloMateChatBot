@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel
 
 from app.api.auth import validate_init_data
@@ -249,6 +249,33 @@ def create_admin_router(
             ],
             "facts": contact_facts,
             "examples": examples,
+        }
+
+    @router.get("/users/{user_id}/messages")
+    async def list_user_messages(
+        user_id: int,
+        limit: int = Query(default=30, ge=1, le=100),
+        before_id: int | None = Query(default=None, ge=1),
+        caller_id: int = AdminUser,
+    ) -> dict[str, Any]:
+        """Return a paginated conversation history page for one contact."""
+        messages, has_more = memory_service.messages_before(
+            user_id, before_id=before_id, limit=limit
+        )
+        return {
+            "messages": [
+                {
+                    "id": m.id,
+                    "role": m.role,
+                    "authored_by": m.authored_by,
+                    "content": m.content,
+                    "created_at": m.created_at.isoformat(),
+                }
+                for m in messages
+            ],
+            "has_more": has_more,
+            "next_before_id": messages[0].id if has_more and messages else None,
+            "total": memory_service.count_messages(user_id),
         }
 
     # -----------------------------------------------------------------------

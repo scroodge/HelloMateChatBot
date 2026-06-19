@@ -101,6 +101,31 @@ def test_memory_window_order(database: Database) -> None:
     assert [m.content for m in messages] == ["m1", "m2"]  # oldest-first within the window
 
 
+def test_memory_list_messages_before_cursor(database: Database) -> None:
+    saved = [
+        database.memory.add_message(
+            ConversationMessage(id=0, user_id=5, role="user", content=f"m{i}", created_at=_now())
+        )
+        for i in range(5)
+    ]
+
+    messages, has_more = database.memory.list_messages_before(5, before_id=None, limit=2)
+    assert [m.content for m in messages] == ["m3", "m4"]
+    assert has_more is True
+
+    older, older_has_more = database.memory.list_messages_before(
+        5, before_id=saved[3].id, limit=2
+    )
+    assert [m.content for m in older] == ["m1", "m2"]
+    assert older_has_more is True
+
+    oldest, oldest_has_more = database.memory.list_messages_before(
+        5, before_id=saved[1].id, limit=2
+    )
+    assert [m.content for m in oldest] == ["m0"]
+    assert oldest_has_more is False
+
+
 def test_mood_roundtrip(database: Database) -> None:
     entry = database.moods.add_mood_entry(
         MoodEntry(id=0, user_id=9, mood=4, note="ok", recorded_at=_now())

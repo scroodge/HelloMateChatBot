@@ -18,6 +18,15 @@ def get_language(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     return settings_service.get_language(update.effective_user.id)
 
 
+def is_business_update(update: Update) -> bool:
+    """Return True for Telegram Business messages, even in private chats."""
+
+    if update.business_message is not None or update.edited_business_message is not None:
+        return True
+    message = update.effective_message
+    return bool(message is not None and message.business_connection_id)
+
+
 async def reply(
     update: Update,
     key: str,

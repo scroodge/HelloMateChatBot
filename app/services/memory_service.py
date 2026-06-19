@@ -104,6 +104,13 @@ class MemoryService:
 
         return self.repository.list_messages_asc(user_id, offset=offset, limit=limit)
 
+    def messages_before(
+        self, user_id: int, *, before_id: int | None, limit: int
+    ) -> tuple[list[ConversationMessage], bool]:
+        """Return a latest/older page, oldest-first, plus whether more older rows exist."""
+
+        return self.repository.list_messages_before(user_id, before_id=before_id, limit=limit)
+
     def count_owner_messages(self, user_id: int) -> int:
         """Total owner-authored (real human) replies for a contact."""
 
