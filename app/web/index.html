@@ -74,6 +74,7 @@
       color: #fff;
       vertical-align: top;
     }
+    .nav-badge[hidden] { display: none; }
     #toast {
       position: fixed;
       left: 50%;
@@ -1406,7 +1407,7 @@ function updateSuggestBadge(n) {
   const b = document.getElementById('nav-suggest-badge');
   if (!b) return;
   if (n > 0) { b.textContent = n; b.hidden = false; }
-  else { b.hidden = true; }
+  else { b.textContent = ''; b.hidden = true; }
 }
 
 async function loadSuggestions() {
