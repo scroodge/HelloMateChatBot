@@ -35,6 +35,7 @@ console, reply debouncing for rapid short messages, and a personal RAG knowledge
 - **Business reply modes** — per-contact and global: suggest a draft, auto-reply, or stay silent
 - **Suggest Inbox** — in suggest mode, drafts are stored **only** in the Mini App inbox (no chat message): review, edit inline, copy, save as a positive or negative example, or dismiss (with a pending-count badge). Voice messages are drafted into the inbox too
 - **Owner personal assistant** — use the direct bot chat as a personal assistant via `/assistant`: multiple named personas (e.g. an English teacher), each with its own isolated persistent memory, fully separate from contact data. Owner-only
+- **Chat history export** — download a contact's full conversation as JSON (role + author + content + timestamp) from the Mini App History tab, ready to load back into an LLM
 - Daily greetings with timezone-aware calendar logic
 - Random conversation starters and scheduled proactive greetings
 - Per-user settings, i18n (`ru`, `en`), and admin controls
@@ -417,6 +418,7 @@ Restart the bot, then open your bot in Telegram and tap the Mini App button.
 - Phase 14 (done): per-contact curated few-shot examples — owner-picked ideal replies injected as a tone/format guide; editable in the contact card or saved directly from the Playground
 - Phase 15 (done): Mini App UX overhaul — Suggest Inbox (review/edit/copy/save/dismiss drafts), contacts search + sort + reply-mode/examples badges, contact detail split into sub-tabs (Персона/Факты/Эталоны/История), native Telegram toasts/haptics/BackButton
 - Phase 16 (done): negative few-shot examples (anti-patterns); custom global fact categories with auto-derived keys and multi-value (list) support, labelled in prompt and UI; Suggest mode is inbox-only (no chat/DM duplicate, voice drafts included); owner personal-assistant mode (`/assistant`) with named personas and isolated persistent memory
+- Phase 17 (done): chat history JSON export from the Mini App (full per-contact history, LLM-loadable)
 
 ## Contributing
 

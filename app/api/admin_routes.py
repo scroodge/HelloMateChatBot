@@ -278,6 +278,41 @@ def create_admin_router(
             "total": memory_service.count_messages(user_id),
         }
 
+    @router.get("/users/{user_id}/export")
+    async def export_user_history(user_id: int, caller_id: int = AdminUser) -> dict[str, Any]:
+        """Export a contact's full conversation history as JSON, loadable into an LLM.
+
+        Messages are oldest-first with role + authored_by + content + timestamp,
+        so the file can be fed straight back as chat context. Capped to the most
+        recent EXPORT_CAP messages to bound payload size.
+        """
+        from datetime import datetime
+
+        export_cap = 5000
+        total = memory_service.count_messages(user_id)
+        offset = max(0, total - export_cap)
+        messages = memory_service.messages_slice(user_id, offset=offset, limit=export_cap)
+        profile = profile_service.get_profile(user_id)
+        return {
+            "contact": {
+                "user_id": user_id,
+                "display_name": profile.display_name if profile else None,
+            },
+            "exported_at": datetime.now().astimezone().isoformat(),
+            "message_count": len(messages),
+            "total_messages": total,
+            "truncated": total > len(messages),
+            "messages": [
+                {
+                    "role": m.role,
+                    "authored_by": m.authored_by,
+                    "content": m.content,
+                    "created_at": m.created_at.isoformat(),
+                }
+                for m in messages
+            ],
+        }
+
     # -----------------------------------------------------------------------
     # 7B: Prompt playground
     # -----------------------------------------------------------------------

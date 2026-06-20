@@ -142,3 +142,38 @@ def test_contact_messages_endpoint_pages_by_before_id(tmp_path) -> None:
         assert [m["content"] for m in second_payload["messages"]] == ["msg 1", "msg 2"]
         assert second_payload["has_more"] is True
         assert second_payload["next_before_id"] == saved[1].id
+
+
+def test_export_history_returns_full_chronological_json(tmp_path) -> None:
+    """Export returns the whole history oldest-first, ready to load into an LLM."""
+    from datetime import datetime
+
+    with Database(f"sqlite:///{tmp_path / 'export.db'}") as db:
+        client, profile_service, _ = _make_client(db)
+        profile_service.get_or_create_profile(5336144564, display_name="милая")
+        for i in range(4):
+            db.memory.add_message(
+                ConversationMessage(
+                    id=0,
+                    user_id=5336144564,
+                    role="user" if i % 2 == 0 else "assistant",
+                    content=f"msg {i}",
+                    created_at=datetime(2026, 6, 19, 12, i),
+                    authored_by="contact" if i % 2 == 0 else "owner",
+                )
+            )
+
+        resp = client.get("/api/admin/users/5336144564/export")
+        assert resp.status_code == 200
+        payload = resp.json()
+
+    assert payload["contact"]["user_id"] == 5336144564
+    assert payload["contact"]["display_name"] == "милая"
+    assert payload["message_count"] == 4
+    assert payload["total_messages"] == 4
+    assert payload["truncated"] is False
+    # Oldest-first, with role + authored_by + content for direct LLM loading
+    assert [m["content"] for m in payload["messages"]] == ["msg 0", "msg 1", "msg 2", "msg 3"]
+    assert payload["messages"][0]["role"] == "user"
+    assert payload["messages"][0]["authored_by"] == "contact"
+    assert payload["messages"][1]["authored_by"] == "owner"
