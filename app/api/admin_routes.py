@@ -7,8 +7,10 @@ Auth is via Telegram Mini App initData in the X-Telegram-Init-Data header.
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 
+import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel
 
@@ -26,6 +28,30 @@ from app.services.profile_service import ProfileService
 from app.services.reply_service import ReplyService
 from app.services.settings_service import SettingsService
 from app.services.suggestions_service import SuggestionsService
+
+logger = logging.getLogger(__name__)
+
+
+async def _send_document_via_bot(
+    bot_token: str, chat_id: int, filename: str, content: bytes, caption: str = ""
+) -> None:
+    """Send an in-memory file to a chat via the Telegram Bot API (sendDocument).
+
+    Used so the Mini App can deliver a real file into the owner's chat with the
+    bot — blob downloads are blocked inside the Telegram in-app webview.
+    """
+    files = {"document": (filename, content, "application/json")}
+    data: dict[str, object] = {"chat_id": chat_id}
+    if caption:
+        data["caption"] = caption
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.post(
+            f"https://api.telegram.org/bot{bot_token}/sendDocument",
+            data=data,
+            files=files,
+        )
+        response.raise_for_status()
+
 
 # ---------------------------------------------------------------------------
 # Pydantic schemas
@@ -278,14 +304,8 @@ def create_admin_router(
             "total": memory_service.count_messages(user_id),
         }
 
-    @router.get("/users/{user_id}/export")
-    async def export_user_history(user_id: int, caller_id: int = AdminUser) -> dict[str, Any]:
-        """Export a contact's full conversation history as JSON, loadable into an LLM.
-
-        Messages are oldest-first with role + authored_by + content + timestamp,
-        so the file can be fed straight back as chat context. Capped to the most
-        recent EXPORT_CAP messages to bound payload size.
-        """
+    def _build_export(user_id: int) -> dict[str, Any]:
+        """Assemble a contact's full history as an LLM-loadable dict (oldest-first)."""
         from datetime import datetime
 
         export_cap = 5000
@@ -312,6 +332,41 @@ def create_admin_router(
                 for m in messages
             ],
         }
+
+    def _export_filename(payload: dict[str, Any], user_id: int) -> str:
+        from datetime import datetime
+
+        name = (payload.get("contact") or {}).get("display_name") or f"id_{user_id}"
+        safe = "".join(c if (c.isalnum() or c in "-_") else "_" for c in name).strip("_")
+        return f"chat_{safe or user_id}_{datetime.now().strftime('%Y-%m-%d')}.json"
+
+    @router.get("/users/{user_id}/export")
+    async def export_user_history(user_id: int, caller_id: int = AdminUser) -> dict[str, Any]:
+        """Export a contact's full conversation history as JSON, loadable into an LLM.
+
+        Messages are oldest-first with role + authored_by + content + timestamp,
+        so the file can be fed straight back as chat context. Capped to the most
+        recent 5000 messages to bound payload size.
+        """
+        return _build_export(user_id)
+
+    @router.post("/users/{user_id}/export/send")
+    async def send_export_to_chat(user_id: int, caller_id: int = AdminUser) -> dict[str, Any]:
+        """Send the contact's history as a .json document to the owner's bot chat.
+
+        Reliable file delivery for Telegram: the in-app webview blocks blob
+        downloads, so the bot DMs the file to the caller (the owner) instead.
+        """
+        payload = _build_export(user_id)
+        content = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
+        filename = _export_filename(payload, user_id)
+        caption = f"История чата: {payload['message_count']} сообщений"
+        try:
+            await _send_document_via_bot(bot_token, caller_id, filename, content, caption)
+        except Exception as exc:
+            logger.exception("Failed to send export document to %s", caller_id)
+            raise HTTPException(status_code=502, detail="Не удалось отправить файл в чат") from exc
+        return {"sent": True, "message_count": payload["message_count"], "filename": filename}
 
     # -----------------------------------------------------------------------
     # 7B: Prompt playground

@@ -35,7 +35,7 @@ console, reply debouncing for rapid short messages, and a personal RAG knowledge
 - **Business reply modes** — per-contact and global: suggest a draft, auto-reply, or stay silent
 - **Suggest Inbox** — in suggest mode, drafts are stored **only** in the Mini App inbox (no chat message): review, edit inline, copy, save as a positive or negative example, or dismiss (with a pending-count badge). Voice messages are drafted into the inbox too
 - **Owner personal assistant** — use the direct bot chat as a personal assistant via `/assistant`: multiple named personas (e.g. an English teacher), each with its own isolated persistent memory, fully separate from contact data. Owner-only
-- **Chat history export** — download a contact's full conversation as JSON (role + author + content + timestamp) from the Mini App History tab, ready to load back into an LLM
+- **Chat history export** — from the Mini App History tab, the bot DMs you a contact's full conversation as a JSON file (role + author + content + timestamp), ready to load back into an LLM (delivered as a Telegram document, since in-webview downloads are blocked)
 - Daily greetings with timezone-aware calendar logic
 - Random conversation starters and scheduled proactive greetings
 - Per-user settings, i18n (`ru`, `en`), and admin controls

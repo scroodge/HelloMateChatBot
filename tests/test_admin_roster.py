@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -177,3 +179,41 @@ def test_export_history_returns_full_chronological_json(tmp_path) -> None:
     assert payload["messages"][0]["role"] == "user"
     assert payload["messages"][0]["authored_by"] == "contact"
     assert payload["messages"][1]["authored_by"] == "owner"
+
+
+def test_export_send_dms_document_to_owner(tmp_path, monkeypatch) -> None:
+    """The send endpoint DMs the history as a .json document to the caller."""
+    from datetime import datetime
+
+    import app.api.admin_routes as admin_routes
+
+    sent = {}
+
+    async def fake_send(bot_token, chat_id, filename, content, caption=""):
+        sent.update(
+            bot_token=bot_token, chat_id=chat_id, filename=filename,
+            content=content, caption=caption,
+        )
+
+    monkeypatch.setattr(admin_routes, "_send_document_via_bot", fake_send)
+
+    with Database(f"sqlite:///{tmp_path / 'send.db'}") as db:
+        client, profile_service, _ = _make_client(db)
+        profile_service.get_or_create_profile(5336144564, display_name="милая")
+        db.memory.add_message(
+            ConversationMessage(
+                id=0, user_id=5336144564, role="user", content="привет",
+                created_at=datetime(2026, 6, 19, 12, 0), authored_by="contact",
+            )
+        )
+
+        resp = client.post("/api/admin/users/5336144564/export/send")
+        assert resp.status_code == 200
+        body = resp.json()
+
+    assert body["sent"] is True
+    assert body["message_count"] == 1
+    assert sent["chat_id"] == ADMIN_ID  # delivered to the owner (the caller)
+    assert sent["filename"].endswith(".json")
+    payload = json.loads(sent["content"].decode("utf-8"))
+    assert payload["messages"][0]["content"] == "привет"

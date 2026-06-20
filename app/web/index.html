@@ -605,8 +605,8 @@
         <div class="card-title" style="margin-bottom:0">История сообщений</div>
         <div style="display:flex;align-items:center;gap:8px">
           <div class="history-count" id="history-count"></div>
-          <button class="btn btn-sm btn-secondary" onclick="exportHistory()"
-            style="width:auto;font-size:11px;flex-shrink:0" title="Скачать всю историю в JSON для загрузки в ИИ">⬇️ JSON</button>
+          <button class="btn btn-sm btn-secondary" onclick="exportHistory(this)"
+            style="width:auto;font-size:11px;flex-shrink:0" title="Бот пришлёт всю историю файлом JSON в чат">⬇️ JSON</button>
         </div>
       </div>
       <button class="btn btn-sm btn-secondary history-load" id="history-load-older"
@@ -1104,33 +1104,18 @@ function loadOlderHistory() {
   return loadHistoryPage({ reset: false });
 }
 
-async function exportHistory() {
+async function exportHistory(btn) {
   if (!currentUserId) return;
+  if (btn) { btn.disabled = true; }
   try {
-    const data = await get(`/admin/users/${currentUserId}/export`);
-    const json = JSON.stringify(data, null, 2);
-    const safeName = (data.contact && data.contact.display_name)
-      ? data.contact.display_name.replace(/[^\wа-яёА-ЯЁ-]+/g, '_')
-      : ('id_' + currentUserId);
-    const fname = `chat_${safeName}_${new Date().toISOString().slice(0, 10)}.json`;
-    try {
-      const blob = new Blob([json], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = fname;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch (_) {
-      // Some in-app webviews block blob downloads — fall back to clipboard.
-      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(json);
-    }
-    const note = data.truncated ? ` (последние ${data.message_count} из ${data.total_messages})` : '';
-    toast(`История: ${data.message_count} сообщений${note}`);
+    // The bot DMs the .json file to you — reliable inside Telegram, where
+    // in-webview blob downloads are blocked.
+    const res = await post(`/admin/users/${currentUserId}/export/send`);
+    toast(`📄 Файл (${res.message_count} сообщений) отправлен в чат с ботом`);
   } catch (e) {
     tg.showAlert?.('Ошибка: ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; }
   }
 }
 
