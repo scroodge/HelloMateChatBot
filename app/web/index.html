@@ -541,9 +541,18 @@
       <div style="font-size:11px;color:var(--hint);margin-bottom:8px">
         Пересобирает резюме и автоматически извлечённые факты из всей истории. Переписка, персона, стиль и эталонные ответы сохраняются.
       </div>
-      <button class="btn btn-sm btn-secondary" id="rebuild-memory-btn" onclick="rebuildMemory(this)" style="width:auto">
-        ↻ Пересобрать память
-      </button>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        <button class="btn btn-sm btn-secondary memory-rebuild-btn" onclick="rebuildMemory(this, 'facts')" style="width:auto">
+          ↻ Только факты
+        </button>
+        <button class="btn btn-sm btn-secondary memory-rebuild-btn" onclick="rebuildMemory(this, 'summary')" style="width:auto">
+          ↻ Только резюме
+        </button>
+        <button class="btn btn-sm memory-rebuild-btn" onclick="rebuildMemory(this, 'all')" style="width:auto">
+          ↻ Всё вместе
+        </button>
+      </div>
+      <div id="memory-rebuild-status" class="persona-source" style="margin-top:6px"></div>
     </div>
     <!-- learned style -->
     <div class="card" id="style-card" style="display:none">
@@ -1356,33 +1365,40 @@ async function clearAllFacts() {
   }
 }
 
-async function rebuildMemory(btn) {
+async function rebuildMemory(btn, part) {
   if (!currentUserId) return;
-  tg.showConfirm('Пересобрать резюме и факты из всей истории? Переписка, персона, стиль и примеры сохранятся.', async (ok) => {
+  const labels = { facts:'Факты', summary:'Резюме', all:'Резюме и факты' };
+  tg.showConfirm(`Пересобрать ${labels[part].toLowerCase()} из всей истории? Переписка, персона, стиль и примеры сохранятся.`, async (ok) => {
     if (!ok) return;
-    const original = btn.textContent;
-    btn.disabled = true;
-    btn.textContent = 'Пересобираю…';
+    const buttons = [...document.querySelectorAll('.memory-rebuild-btn')];
+    const statusEl = document.getElementById('memory-rebuild-status');
+    buttons.forEach(b => { b.disabled = true; });
+    statusEl.textContent = 'Запускаю пересборку…';
     try {
       const rebuildUserId = currentUserId;
-      await post(`/admin/users/${rebuildUserId}/memory/rebuild`);
+      await post(`/admin/users/${rebuildUserId}/memory/rebuild?part=${part}`);
       while (true) {
         await new Promise(resolve => setTimeout(resolve, 2000));
         const result = await get(`/admin/users/${rebuildUserId}/memory/rebuild`);
-        if (result.status === 'running') continue;
+        if (result.status === 'running') {
+          const stageLabel = result.stage === 'facts' ? 'извлекаю факты' : 'собираю резюме';
+          statusEl.textContent = `Выполняется: ${stageLabel}…`;
+          continue;
+        }
         if (result.status === 'failed') throw new Error(result.detail || 'Пересборка не удалась');
         if (result.status === 'completed') {
-          if (currentUserId === rebuildUserId) renderFacts(result.facts || {});
-          toast(`Память пересобрана из ${result.message_count} сообщений`);
+          if (currentUserId === rebuildUserId && result.facts) renderFacts(result.facts);
+          statusEl.textContent = `Готово: обработано ${result.message_count} сообщений`;
+          toast(`${labels[part]} пересобраны`);
           break;
         }
         throw new Error('Неизвестный статус пересборки');
       }
     } catch(e) {
+      statusEl.textContent = '';
       tg.showAlert('Ошибка: ' + e.message);
     } finally {
-      btn.disabled = false;
-      btn.textContent = original;
+      buttons.forEach(b => { b.disabled = false; });
     }
   });
 }

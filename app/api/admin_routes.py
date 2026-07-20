@@ -556,28 +556,49 @@ def create_admin_router(
         facts_service.clear_facts(user_id)
         return {}
 
-    async def _run_memory_rebuild(user_id: int) -> None:
+    async def _run_memory_rebuild(user_id: int, part: str) -> None:
         assert summary_service is not None
         assert facts_service is not None
         try:
-            summary = await summary_service.rebuild(user_id)
-            await facts_service.rebuild(user_id)
+            summary = None
+            if part in {"summary", "all"}:
+                memory_rebuild_status[user_id] = {
+                    "status": "running",
+                    "part": part,
+                    "stage": "summary",
+                }
+                summary = await summary_service.rebuild(user_id)
+            if part in {"facts", "all"}:
+                memory_rebuild_status[user_id] = {
+                    "status": "running",
+                    "part": part,
+                    "stage": "facts",
+                }
+                await facts_service.rebuild(user_id)
             memory_rebuild_status[user_id] = {
                 "status": "completed",
+                "part": part,
                 "message_count": memory_service.count_messages(user_id),
                 "summary": summary,
-                "facts": facts_service.facts_structured(user_id),
+                "facts": (
+                    facts_service.facts_structured(user_id) if part in {"facts", "all"} else None
+                ),
             }
         except Exception:
             logger.exception("Failed to rebuild memory for contact %s", user_id)
             memory_rebuild_status[user_id] = {
                 "status": "failed",
+                "part": part,
                 "detail": "Не удалось пересобрать память",
             }
 
     @router.post("/users/{user_id}/memory/rebuild")
-    async def rebuild_derived_memory(user_id: int, caller_id: int = AdminUser) -> dict[str, Any]:
-        """Start a background rebuild while preserving messages and curated data."""
+    async def rebuild_derived_memory(
+        user_id: int,
+        part: str = Query(default="all", pattern="^(facts|summary|all)$"),
+        caller_id: int = AdminUser,
+    ) -> dict[str, Any]:
+        """Start a partial or full rebuild while preserving messages and curated data."""
         if summary_service is None or facts_service is None:
             raise HTTPException(status_code=503, detail="Memory rebuild is not available")
         if memory_service.count_messages(user_id) == 0:
@@ -586,10 +607,15 @@ def create_admin_router(
         if existing is not None and not existing.done():
             raise HTTPException(status_code=409, detail="Пересборка уже выполняется")
 
-        memory_rebuild_status[user_id] = {"status": "running"}
-        task = asyncio.create_task(_run_memory_rebuild(user_id))
+        first_stage = "summary" if part in {"summary", "all"} else "facts"
+        memory_rebuild_status[user_id] = {
+            "status": "running",
+            "part": part,
+            "stage": first_stage,
+        }
+        task = asyncio.create_task(_run_memory_rebuild(user_id, part))
         memory_rebuild_tasks[user_id] = task
-        return {"status": "started"}
+        return {"status": "started", "part": part, "stage": first_stage}
 
     @router.get("/users/{user_id}/memory/rebuild")
     async def get_memory_rebuild_status(user_id: int, caller_id: int = AdminUser) -> dict[str, Any]:
