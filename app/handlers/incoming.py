@@ -40,6 +40,7 @@ async def handle_incoming_text(
     sender_is_owner: bool = False,
     contact_display_name: str | None = None,
     reply_mode: str = "auto",
+    reply_context: str | None = None,
 ) -> None:
     """Process an incoming text message for a contact.
 
@@ -65,10 +66,11 @@ async def handle_incoming_text(
                 sender_is_owner=True,
                 contact_display_name=contact_display_name,
                 reply_mode=reply_mode,
+                reply_context=reply_context,
             )
             return
 
-        async def on_flush(combined_text: str) -> None:
+        async def on_flush(combined_text: str, combined_reply_context: str | None) -> None:
             await _process_incoming_text(
                 contact_user_id=contact_user_id,
                 message_text=combined_text,
@@ -77,11 +79,13 @@ async def handle_incoming_text(
                 sender_is_owner=False,
                 contact_display_name=contact_display_name,
                 reply_mode=reply_mode,
+                reply_context=combined_reply_context,
             )
 
         await debounce_service.enqueue(
             contact_user_id,
             message_text,
+            reply_context=reply_context,
             on_flush=on_flush,
         )
         return
@@ -94,6 +98,7 @@ async def handle_incoming_text(
         sender_is_owner=sender_is_owner,
         contact_display_name=contact_display_name,
         reply_mode=reply_mode,
+        reply_context=reply_context,
     )
 
 
@@ -106,6 +111,7 @@ async def _process_incoming_text(
     sender_is_owner: bool = False,
     contact_display_name: str | None = None,
     reply_mode: str = "auto",
+    reply_context: str | None = None,
 ) -> None:
     """Run greeting / memory / AI logic for a (possibly batched) message."""
 
@@ -183,6 +189,7 @@ async def _process_incoming_text(
             reply_mode=reply_mode,
             event_service=event_service,
             suggestions_service=suggestions_service,
+            reply_context=reply_context,
         )
         return
 
@@ -233,6 +240,7 @@ async def _process_incoming_text(
         reply_mode=reply_mode,
         event_service=event_service,
         suggestions_service=suggestions_service,
+        reply_context=reply_context,
     )
 
 
@@ -245,6 +253,7 @@ async def _deliver_ai_reply(
     reply_mode: str,
     event_service: EventService | None,
     suggestions_service: object | None = None,
+    reply_context: str | None = None,
 ) -> None:
     """Route AI reply based on mode: auto sends directly, suggest stores to inbox, off skips."""
 
@@ -264,7 +273,9 @@ async def _deliver_ai_reply(
     if reply_mode == "suggest":
         # Suggest mode never writes to the chat: the draft is stored in the
         # Suggest Inbox (Mini App) only. No DM, no message to the contact.
-        draft = await reply_service.draft_reply(contact_user_id, message_text)
+        draft = await reply_service.draft_reply(
+            contact_user_id, message_text, reply_context=reply_context
+        )
         logger.info(
             "suggest draft for contact=%s: %s",
             contact_user_id,
@@ -275,7 +286,9 @@ async def _deliver_ai_reply(
         return
 
     # auto (default)
-    reply = await reply_service.generate_reply(contact_user_id, message_text)
+    reply = await reply_service.generate_reply(
+        contact_user_id, message_text, reply_context=reply_context
+    )
     if reply:
         await reply_fn(reply)
         if isinstance(event_service, EventService):

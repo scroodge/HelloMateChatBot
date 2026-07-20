@@ -74,6 +74,33 @@ def test_valid_modes_constant() -> None:
     assert VALID_BUSINESS_REPLY_MODES == {"auto", "suggest", "off"}
 
 
+def test_business_reply_context_labels_quoted_owner_message() -> None:
+    from app.handlers.business import _reply_context
+
+    message = MagicMock()
+    replied = MagicMock()
+    replied.text = "баланс так баланс"
+    replied.caption = None
+    replied.from_user.id = 100000001
+    replied.sender_business_bot = None
+    message.reply_to_message = replied
+    message.quote = None
+
+    assert _reply_context(message, 100000001) == ("Цитируемое сообщение (Я):\nбаланс так баланс")
+
+
+def test_business_reply_context_falls_back_to_telegram_quote() -> None:
+    from app.handlers.business import _reply_context
+
+    message = MagicMock()
+    message.reply_to_message = None
+    message.quote.text = "частичная цитата"
+
+    assert _reply_context(message, 100000001) == (
+        "Цитируемое сообщение (цитата):\nчастичная цитата"
+    )
+
+
 # ── draft_reply skips memory ───────────────────────────────────────────────────
 
 
@@ -101,10 +128,16 @@ async def test_draft_reply_does_not_record_memory() -> None:
         enabled=True,
     )
 
-    with patch.object(svc, "_build_messages", new=AsyncMock(return_value=[
-        {"role": "system", "content": "Ты бот"},
-        {"role": "user", "content": "привет"},
-    ])):
+    with patch.object(
+        svc,
+        "_build_messages",
+        new=AsyncMock(
+            return_value=[
+                {"role": "system", "content": "Ты бот"},
+                {"role": "user", "content": "привет"},
+            ]
+        ),
+    ):
         draft = await svc.draft_reply(1, "привет")
 
     assert draft == "вот мой ответ"
@@ -145,9 +178,15 @@ async def test_draft_reply_returns_none_on_llm_error() -> None:
         enabled=True,
     )
 
-    with patch.object(svc, "_build_messages", new=AsyncMock(return_value=[
-        {"role": "user", "content": "привет"},
-    ])):
+    with patch.object(
+        svc,
+        "_build_messages",
+        new=AsyncMock(
+            return_value=[
+                {"role": "user", "content": "привет"},
+            ]
+        ),
+    ):
         result = await svc.draft_reply(1, "привет")
 
     assert result is None
@@ -200,7 +239,7 @@ async def test_deliver_ai_reply_suggest_records_to_inbox_no_chat_message() -> No
         suggestions_service=suggestions_service,
     )
 
-    reply_service.draft_reply.assert_awaited_once_with(1, "привет")
+    reply_service.draft_reply.assert_awaited_once_with(1, "привет", reply_context=None)
     suggestions_service.record.assert_called_once_with(1, "привет", "черновик")
     reply_fn.assert_not_called()  # nothing sent to the chat
 
@@ -224,7 +263,7 @@ async def test_deliver_ai_reply_auto_sends_directly() -> None:
         event_service=None,
     )
 
-    reply_service.generate_reply.assert_awaited_once_with(1, "привет")
+    reply_service.generate_reply.assert_awaited_once_with(1, "привет", reply_context=None)
     reply_fn.assert_awaited_once_with("ответ")
 
 

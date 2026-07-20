@@ -6,7 +6,12 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.services.reply_service import ReplyService, _contains_cjk, build_persona_prompt
+from app.services.reply_service import (
+    ReplyService,
+    _contains_cjk,
+    _current_user_content,
+    build_persona_prompt,
+)
 from app.services.weather_service import is_weather_query
 
 
@@ -75,3 +80,49 @@ async def test_build_messages_uses_resolved_persona_prompt() -> None:
     assert messages[0]["role"] == "system"
     # Persona is the base of the system prompt; an openness directive is appended last.
     assert messages[0]["content"].startswith("Custom admin persona")
+
+
+def test_reply_context_is_separated_from_contact_message() -> None:
+    content = _current_user_content(
+        "Переведи)))",
+        "Цитируемое сообщение (Я):\nбаланс так баланс",
+        "ru",
+    )
+
+    assert "это не новое сообщение собеседницы" in content
+    assert "Цитируемое сообщение (Я)" in content
+    assert content.endswith("Новое сообщение собеседницы:\nПереведи)))")
+
+
+@pytest.mark.asyncio
+async def test_build_messages_adds_accuracy_priority_and_reply_context() -> None:
+    settings_service = MagicMock()
+    settings_service.resolve_persona_prompt.return_value = "Дерзкая персона"
+    settings_service.get_openness.return_value = "open"
+    settings_service.get_user_settings.return_value = MagicMock(style_learning_enabled=False)
+    profile_service = MagicMock()
+    profile_service.get_or_create_profile.return_value = MagicMock(display_name="Ирина")
+    memory_service = MagicMock()
+    memory_service.get_summary.return_value = None
+    memory_service.as_chat_messages.return_value = []
+    mood_service = MagicMock()
+    mood_service.latest_mood.return_value = None
+
+    service = ReplyService(
+        llm_service=AsyncMock(),
+        memory_service=memory_service,
+        mood_service=mood_service,
+        profile_service=profile_service,
+        settings_service=settings_service,
+        enabled=True,
+    )
+    messages = await service._build_messages(
+        1,
+        "Переведи)))",
+        "ru",
+        reply_context="Цитируемое сообщение (Я):\nбаланс так баланс",
+    )
+
+    assert "сначала точно пойми" in messages[0]["content"]
+    assert "не восстанавливай пропущенный смысл по догадке" in messages[0]["content"].lower()
+    assert "Цитируемое сообщение (Я)" in messages[-1]["content"]

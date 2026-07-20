@@ -9,12 +9,18 @@ from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
 
-FlushCallback = Callable[[str], Awaitable[None]]
+FlushCallback = Callable[[str, str | None], Awaitable[None]]
+
+
+@dataclass
+class _PendingPart:
+    text: str
+    reply_context: str | None = None
 
 
 @dataclass
 class _PendingBuffer:
-    parts: list[str] = field(default_factory=list)
+    parts: list[_PendingPart] = field(default_factory=list)
     on_flush: FlushCallback | None = None
     task: asyncio.Task[None] | None = None
 
@@ -35,6 +41,7 @@ class ReplyDebounceService:
         contact_user_id: int,
         message_text: str,
         *,
+        reply_context: str | None = None,
         on_flush: FlushCallback,
     ) -> None:
         """Buffer a message and (re)start the debounce timer."""
@@ -47,7 +54,12 @@ class ReplyDebounceService:
             buffer = _PendingBuffer()
             self._buffers[contact_user_id] = buffer
 
-        buffer.parts.append(message_text.strip())
+        buffer.parts.append(
+            _PendingPart(
+                text=message_text.strip(),
+                reply_context=(reply_context or "").strip() or None,
+            )
+        )
         buffer.on_flush = on_flush
 
         if buffer.task is not None:
@@ -80,17 +92,19 @@ class ReplyDebounceService:
         # raise CancelledError on the first await in on_flush and silently abort
         # the whole reply pipeline (the suggest-mode "no draft" bug).
         current = asyncio.current_task()
-        if (
-            buffer.task is not None
-            and buffer.task is not current
-            and not buffer.task.done()
-        ):
+        if buffer.task is not None and buffer.task is not current and not buffer.task.done():
             buffer.task.cancel()
 
         if not buffer.parts or buffer.on_flush is None:
             return
 
-        combined = "\n".join(buffer.parts)
+        combined = "\n".join(part.text for part in buffer.parts)
+        quote_blocks = [
+            f"Для сообщения «{part.text}»:\n{part.reply_context}"
+            for part in buffer.parts
+            if part.reply_context
+        ]
+        combined_reply_context = "\n\n".join(quote_blocks) or None
         # INFO when several messages were coalesced so batching is visible in prod
         # logs; DEBUG for the common single-message case to avoid noise.
         log = logger.info if len(buffer.parts) > 1 else logger.debug
@@ -101,6 +115,6 @@ class ReplyDebounceService:
             combined[:120],
         )
         try:
-            await buffer.on_flush(combined)
+            await buffer.on_flush(combined, combined_reply_context)
         except Exception:
             logger.exception("Debounced flush failed for contact %s", contact_user_id)

@@ -127,6 +127,41 @@ def _openness_directive(openness: str, language: str) -> str:
     return directives.get(openness, directives["neutral"])
 
 
+def _accuracy_directive(language: str) -> str:
+    if language == "ru":
+        return (
+            " Приоритет ответа: сначала точно пойми и выполни прямую просьбу "
+            "собеседницы. Если она просит объяснить, перевести или уточнить, ответь "
+            "по существу; характер, юмор и флирт добавляй только если они не искажают "
+            "смысл. Не восстанавливай пропущенный смысл по догадке и не приписывай "
+            "владельцу намерения, действия или чувства без опоры на контекст. Если "
+            "важного контекста недостаточно, задай один короткий уточняющий вопрос."
+        )
+    return (
+        " Reply priority: first understand and fulfil the contact's direct request "
+        "accurately. If they ask for an explanation, translation, or clarification, "
+        "answer the substance first; add personality, humour, or flirting only when it "
+        "does not distort the meaning. Do not guess missing meaning or attribute "
+        "unsupported intentions, actions, or feelings to the owner. If essential context "
+        "is missing, ask one short clarifying question."
+    )
+
+
+def _current_user_content(user_message: str, reply_context: str | None, language: str) -> str:
+    if not reply_context:
+        return user_message
+    context = reply_context.strip()[:4000]
+    if language == "ru":
+        return (
+            "Контекст цитаты (это не новое сообщение собеседницы):\n"
+            f"{context}\n\nНовое сообщение собеседницы:\n{user_message}"
+        )
+    return (
+        "Quoted context (this is not a new message from the contact):\n"
+        f"{context}\n\nContact's new message:\n{user_message}"
+    )
+
+
 class ReplyService:
     """Build context-aware replies using memory, mood, and optional RAG."""
 
@@ -156,7 +191,9 @@ class ReplyService:
         self.examples_service = examples_service
         self.enabled = enabled
 
-    async def generate_reply(self, user_id: int, user_message: str) -> str | None:
+    async def generate_reply(
+        self, user_id: int, user_message: str, *, reply_context: str | None = None
+    ) -> str | None:
         """Return an AI reply or None when AI replies are disabled."""
 
         if not self.enabled:
@@ -164,7 +201,9 @@ class ReplyService:
 
         language = self.settings_service.get_language(user_id)
         try:
-            messages = await self._build_messages(user_id, user_message, language)
+            messages = await self._build_messages(
+                user_id, user_message, language, reply_context=reply_context
+            )
             reply = await self.llm_service.complete(messages)
             if _contains_cjk(reply):
                 reply = await self._rewrite_without_cjk(messages, reply, language)
@@ -175,7 +214,9 @@ class ReplyService:
             logger.exception("Failed to generate AI reply for user %s", user_id)
             return translate("ai_unavailable", language)
 
-    async def draft_reply(self, user_id: int, user_message: str) -> str | None:
+    async def draft_reply(
+        self, user_id: int, user_message: str, *, reply_context: str | None = None
+    ) -> str | None:
         """Generate a reply draft without recording it to memory.
 
         Used in suggest mode — the owner receives the draft via DM and pastes it
@@ -188,7 +229,9 @@ class ReplyService:
 
         language = self.settings_service.get_language(user_id)
         try:
-            messages = await self._build_messages(user_id, user_message, language)
+            messages = await self._build_messages(
+                user_id, user_message, language, reply_context=reply_context
+            )
             reply = await self.llm_service.complete(messages)
             if _contains_cjk(reply):
                 reply = await self._rewrite_without_cjk(messages, reply, language)
@@ -233,6 +276,8 @@ class ReplyService:
         user_id: int,
         user_message: str,
         language: str,
+        *,
+        reply_context: str | None = None,
     ) -> list[dict[str, str]]:
         profile = self.profile_service.get_or_create_profile(user_id)
         mood = self.mood_service.latest_mood(user_id)
@@ -309,12 +354,19 @@ class ReplyService:
             if examples_block:
                 system_prompt += examples_block
 
+        system_prompt += _accuracy_directive(language)
+
         # Openness directive goes LAST so it dominates the persona/tone above.
         system_prompt += _openness_directive(openness, language)
 
         messages: list[dict[str, str]] = [{"role": "system", "content": system_prompt}]
         messages.extend(self.memory_service.as_chat_messages(user_id))
-        messages.append({"role": "user", "content": user_message})
+        messages.append(
+            {
+                "role": "user",
+                "content": _current_user_content(user_message, reply_context, language),
+            }
+        )
         return messages
 
     async def _rewrite_without_cjk(

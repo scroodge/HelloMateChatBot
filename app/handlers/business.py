@@ -22,6 +22,28 @@ def _is_bot_echo(message: Message) -> bool:
     return bool(message.sender_business_bot)
 
 
+def _reply_context(message: Message, owner_user_id: int) -> str | None:
+    """Return a role-labelled quote for generation, never for durable memory."""
+
+    replied = message.reply_to_message
+    text = None
+    author = "сообщение"
+    if replied is not None:
+        text = replied.text or replied.caption
+        replied_sender_id = replied.from_user.id if replied.from_user is not None else None
+        if replied_sender_id == owner_user_id or replied.sender_business_bot:
+            author = "Я"
+        else:
+            author = "Контакт"
+    elif message.quote is not None:
+        text = message.quote.text
+        author = "цитата"
+
+    if not text:
+        return None
+    return f"Цитируемое сообщение ({author}):\n{text[:4000]}"
+
+
 async def business_connection_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Persist business connection state when the owner connects or edits the bot."""
 
@@ -135,6 +157,7 @@ async def business_message_handler(update: Update, context: ContextTypes.DEFAULT
             sender_is_owner=False,
             contact_display_name=contact_display_name,
             reply_mode=reply_mode,
+            reply_context=_reply_context(message, connection.owner_user_id),
         )
         return
 
@@ -180,9 +203,7 @@ async def _handle_business_voice(
                 # Store in the Suggest Inbox (Mini App) only — nothing sent to chat.
                 suggestions_service = context.bot_data.get("suggestions_service")
                 if suggestions_service is not None:
-                    suggestions_service.record(
-                        contact_user_id, f"🎤 {transcription}", draft
-                    )
+                    suggestions_service.record(contact_user_id, f"🎤 {transcription}", draft)
         else:
             reply = await reply_service.generate_reply(contact_user_id, transcription)
             if reply:
