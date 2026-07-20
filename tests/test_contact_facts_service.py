@@ -11,6 +11,7 @@ from app.database.db import Database
 from app.services.contact_facts_service import (
     KNOWN_KEYS,
     ContactFactsService,
+    _build_extraction_messages,
     _parse_facts_json,
 )
 from app.services.memory_service import MemoryService
@@ -26,9 +27,7 @@ def _make(tmp_path, *, interval=5, enabled=True, llm_return=None):
     memory = MemoryService(db.memory, window_size=10)
     settings = SettingsService(db.settings, "ru", 9)
     llm = MagicMock()
-    llm.complete = AsyncMock(
-        return_value=json.dumps(llm_return or {}, ensure_ascii=False)
-    )
+    llm.complete = AsyncMock(return_value=json.dumps(llm_return or {}, ensure_ascii=False))
     svc = ContactFactsService(
         repository=db.facts,
         memory_service=memory,
@@ -60,7 +59,7 @@ def test_parse_plain_json() -> None:
 
 
 def test_parse_fenced_json() -> None:
-    raw = "```json\n{\"name\": \"Ivan\", \"occupation\": \"дизайнер\"}\n```"
+    raw = '```json\n{"name": "Ivan", "occupation": "дизайнер"}\n```'
     result = _parse_facts_json(raw, _ALLOWED)
     assert result == {"name": "Ivan", "occupation": "дизайнер"}
 
@@ -85,6 +84,27 @@ def test_parse_invalid_returns_empty() -> None:
     assert _parse_facts_json("[]", _ALLOWED) == {}
 
 
+def test_extraction_prompt_rejects_role_leakage_and_chat_noise() -> None:
+    prompt = _build_extraction_messages(
+        [
+            {"role": "assistant", "content": "У меня есть сын Лёша"},
+            {"role": "user", "content": "А у меня нет детей"},
+            {"role": "user", "content": "Люблю иногда пошутить про мухоморы"},
+        ],
+        {"family": "сын Лёша"},
+        "ru",
+        multi_keys={"family", "interests"},
+    )
+
+    system = prompt[0]["content"]
+    user = prompt[1]["content"]
+    assert "никогда не приписывай Контакту факты из сообщений Я" in system
+    assert "шутки, сарказм, вопросы" in system
+    assert "не повторяй их без нового явного подтверждения" in system
+    assert "Я: У меня есть сын Лёша" in user
+    assert "Контакт: А у меня нет детей" in user
+
+
 # ---------------------------------------------------------------------------
 # Service integration tests
 # ---------------------------------------------------------------------------
@@ -102,9 +122,7 @@ async def test_no_extraction_below_interval(tmp_path) -> None:
 
 @pytest.mark.asyncio
 async def test_extraction_fires_at_interval(tmp_path) -> None:
-    svc, memory, llm, db = _make(
-        tmp_path, interval=5, llm_return={"name": "Дима", "city": "Брест"}
-    )
+    svc, memory, llm, db = _make(tmp_path, interval=5, llm_return={"name": "Дима", "city": "Брест"})
     with db:
         _fill(memory, 1, 5)  # exactly 5 → extract
         await svc.maybe_extract(1)
@@ -116,9 +134,7 @@ async def test_extraction_fires_at_interval(tmp_path) -> None:
 
 @pytest.mark.asyncio
 async def test_extraction_not_repeated_until_more_messages(tmp_path) -> None:
-    svc, memory, llm, db = _make(
-        tmp_path, interval=5, llm_return={"name": "Аня"}
-    )
+    svc, memory, llm, db = _make(tmp_path, interval=5, llm_return={"name": "Аня"})
     with db:
         _fill(memory, 1, 5)
         await svc.maybe_extract(1)

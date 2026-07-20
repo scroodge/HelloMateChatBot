@@ -9,7 +9,7 @@ import pytest
 from app.database.db import Database
 from app.services.memory_service import MemoryService
 from app.services.settings_service import SettingsService
-from app.services.summary_service import SummaryService
+from app.services.summary_service import SummaryService, _build_summary_messages
 
 
 def _make(tmp_path, *, window=5, interval=3, enabled=True):
@@ -37,6 +37,26 @@ def _fill(memory: MemoryService, user_id: int, n: int) -> None:
             memory.record_user_message(user_id, f"contact {i}")
         else:
             memory.record_assistant_message(user_id, f"owner {i}")
+
+
+def test_summary_prompt_requires_role_attribution_and_connected_prose() -> None:
+    prompt = _build_summary_messages(
+        None,
+        [
+            {"role": "user", "content": "У меня сын Лёша"},
+            {"role": "assistant", "content": "Передавай привет"},
+        ],
+        "ru",
+        1500,
+    )
+
+    system = prompt[0]["content"]
+    user = prompt[1]["content"]
+    assert "Всегда различай стороны" in system
+    assert "не перечисляй отдельные реплики" in system
+    assert "не были прямо сформулированы" in system
+    assert "Контакт: У меня сын Лёша" in user
+    assert "Я: Передавай привет" in user
 
 
 @pytest.mark.asyncio

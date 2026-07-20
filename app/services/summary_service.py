@@ -29,10 +29,17 @@ def _build_summary_messages(
 
     if language == "ru":
         system = (
-            "Ты ведёшь сжатую сводку истории переписки, чтобы её можно было "
-            "использовать как контекст. Сохраняй факты, договорённости, имена, "
-            "планы и тон. Пиши кратко, по-русски, без преамбул и без обращения к "
-            f"читателю — только сама сводка, не длиннее ~{max_chars} символов."
+            "Ты ведёшь сжатую смысловую сводку личной переписки для будущих ответов. "
+            "Сохраняй только значимые темы, явно высказанные факты, договорённости, "
+            "планы, границы, повторяющиеся шутки и текущую эмоциональную динамику. "
+            "Всегда различай стороны: 'Контакт' — собеседница, 'Я' — владелец аккаунта. "
+            "Ясно указывай, кто что сказал, предложил, любит или планирует; не переноси "
+            "слова и свойства одной стороны на другую. Не превращай сводку в стенограмму, "
+            "не перечисляй отдельные реплики и не сохраняй бессвязные короткие фразы. "
+            "Не делай выводов о родстве, отношениях, чувствах или намерениях, если они "
+            "не были прямо сформулированы. При неоднозначности опусти деталь. "
+            "Пиши связными короткими предложениями по-русски, без преамбулы и обращения "
+            f"к читателю — только сама сводка, не длиннее ~{max_chars} символов."
         )
         intro_prev = "Текущая сводка:"
         intro_new = "Новые сообщения, которые нужно добавить в сводку (Контакт / Я):"
@@ -40,10 +47,16 @@ def _build_summary_messages(
         owner_label, contact_label = "Я", "Контакт"
     else:
         system = (
-            "You maintain a compact summary of a chat history to use as context. "
-            "Preserve facts, agreements, names, plans and tone. Be concise, no "
-            f"preamble, no addressing the reader — only the summary itself, at most "
-            f"~{max_chars} characters."
+            "You maintain a compact semantic summary of a private chat for future replies. "
+            "Keep only meaningful topics, explicitly stated facts, agreements, plans, "
+            "boundaries, recurring jokes, and the current emotional dynamic. Always "
+            "distinguish the parties: 'Contact' is the correspondent and 'Me' is the "
+            "account owner. State clearly who said, proposed, likes, or plans each thing; "
+            "never transfer words or attributes from one party to the other. Do not write "
+            "a transcript, list isolated messages, or preserve disconnected fragments. "
+            "Do not infer family ties, relationships, feelings, or intentions unless they "
+            "were stated explicitly. Omit ambiguous details. Use short connected sentences, "
+            f"with no preamble or reader address, at most ~{max_chars} characters."
         )
         intro_prev = "Current summary:"
         intro_new = "New messages to fold into the summary (Contact / Me):"
@@ -125,9 +138,7 @@ class SummaryService:
 
         self._in_progress.add(user_id)
         try:
-            new_messages = self.memory_service.messages_slice(
-                user_id, offset=covered, limit=delta
-            )
+            new_messages = self.memory_service.messages_slice(user_id, offset=covered, limit=delta)
             if not new_messages:
                 return
             language = self.settings_service.get_language(user_id)
@@ -143,9 +154,7 @@ class SummaryService:
             self.memory_service.set_summary(
                 user_id, summary[: self.max_chars], covered_count=num_older
             )
-            logger.info(
-                "Summary refreshed for contact %s (covered %d msgs)", user_id, num_older
-            )
+            logger.info("Summary refreshed for contact %s (covered %d msgs)", user_id, num_older)
         except Exception:
             logger.exception("Failed to refresh summary for contact %s", user_id)
         finally:
