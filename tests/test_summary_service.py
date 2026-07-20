@@ -9,7 +9,11 @@ import pytest
 from app.database.db import Database
 from app.services.memory_service import MemoryService
 from app.services.settings_service import SettingsService
-from app.services.summary_service import SummaryService, _build_summary_messages
+from app.services.summary_service import (
+    SummaryService,
+    _build_summary_messages,
+    _truncate_summary,
+)
 
 
 def _make(tmp_path, *, window=5, interval=3, enabled=True):
@@ -57,6 +61,15 @@ def test_summary_prompt_requires_role_attribution_and_connected_prose() -> None:
     assert "не были прямо сформулированы" in system
     assert "Контакт: У меня сын Лёша" in user
     assert "Я: Передавай привет" in user
+
+
+def test_summary_truncation_prefers_complete_sentence() -> None:
+    text = "Первое полное предложение. Второе полное предложение. Незаконченный хвост текста"
+    assert _truncate_summary(text, 60) == ("Первое полное предложение. Второе полное предложение.")
+
+
+def test_summary_truncation_never_cuts_midword() -> None:
+    assert _truncate_summary("оченьдлинноеслово короткий хвост", 24) == "оченьдлинноеслово…"
 
 
 @pytest.mark.asyncio

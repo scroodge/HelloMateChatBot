@@ -21,6 +21,26 @@ logger = logging.getLogger(__name__)
 REBUILD_BATCH_SIZE = 100
 
 
+def _truncate_summary(text: str, max_chars: int) -> str:
+    """Fit a summary without leaving a dangling partial sentence or word."""
+
+    text = text.strip()
+    if len(text) <= max_chars:
+        return text
+
+    clipped = text[:max_chars]
+    boundaries = [clipped.rfind(mark) for mark in (". ", "! ", "? ", "\n")]
+    boundary = max(boundaries)
+    if boundary >= max_chars // 2:
+        ending = clipped[boundary]
+        return clipped[: boundary + (0 if ending == "\n" else 1)].rstrip()
+
+    word_boundary = clipped.rfind(" ")
+    if word_boundary > 0:
+        return clipped[:word_boundary].rstrip(" ,;:-—") + "…"
+    return clipped
+
+
 def _build_summary_messages(
     existing_summary: str | None,
     new_messages: list[dict[str, str]],
@@ -154,7 +174,7 @@ class SummaryService:
             if not summary:
                 return
             self.memory_service.set_summary(
-                user_id, summary[: self.max_chars], covered_count=num_older
+                user_id, _truncate_summary(summary, self.max_chars), covered_count=num_older
             )
             logger.info("Summary refreshed for contact %s (covered %d msgs)", user_id, num_older)
         except Exception:
@@ -201,7 +221,7 @@ class SummaryService:
                 rebuilt = (await self.llm_service.complete(prompt)).strip()
                 if not rebuilt:
                     raise RuntimeError("LLM returned an empty summary")
-                summary = rebuilt[: self.max_chars]
+                summary = _truncate_summary(rebuilt, self.max_chars)
                 covered += len(messages)
                 self.memory_service.set_summary(user_id, summary, covered_count=covered)
 
