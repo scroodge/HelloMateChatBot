@@ -418,3 +418,43 @@ async def test_extraction_appends_multi(tmp_path) -> None:
         _fill(memory, 1, 3)
         await svc.maybe_extract(1)
         assert svc.facts_structured(1)["interests"]["values"] == ["футбол", "музыка"]
+
+
+def test_clear_facts_resets_extraction_watermark(tmp_path) -> None:
+    svc, memory, llm, db = _make(tmp_path)
+    with db:
+        svc.set_fact(1, "name", "Ошибочное имя")
+        db.facts.set_meta(1, 100)
+
+        svc.clear_facts(1)
+
+        assert svc.facts_as_dict(1) == {}
+        assert db.facts.get_meta(1) is None
+
+
+@pytest.mark.asyncio
+async def test_rebuild_reextracts_full_history_in_batches(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("app.services.contact_facts_service.REBUILD_BATCH_SIZE", 3)
+    svc, memory, llm, db = _make(tmp_path, interval=2)
+    llm.complete = AsyncMock(
+        side_effect=[
+            '{"name": "Ирина"}',
+            '{"city": "Минск"}',
+            '{"interests": "прогулки"}',
+        ]
+    )
+    with db:
+        _fill(memory, 1, 8)
+        svc.set_fact(1, "name", "Имя неизвестно")
+        db.facts.set_meta(1, 8)
+
+        result = await svc.rebuild(1)
+
+        assert llm.complete.await_count == 3
+        assert result == {
+            "name": "Ирина",
+            "city": "Минск",
+            "interests": "прогулки",
+        }
+        assert memory.count_messages(1) == 8
+        assert db.facts.get_meta(1).last_message_count == 8

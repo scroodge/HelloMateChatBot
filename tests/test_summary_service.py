@@ -128,3 +128,39 @@ async def test_llm_error_does_not_raise_or_persist(tmp_path) -> None:
         _fill(memory, 1, 8)
         await svc.maybe_refresh(1)  # must swallow the error
         assert memory.get_summary(1) is None  # nothing persisted on failure
+
+
+@pytest.mark.asyncio
+async def test_rebuild_replaces_summary_without_deleting_messages(tmp_path) -> None:
+    svc, memory, llm, db = _make(tmp_path, window=5, interval=3)
+    llm.complete = AsyncMock(side_effect=["Первая сводка", "Новая сводка"])
+    with db:
+        _fill(memory, 1, 8)
+        memory.set_summary(1, "Старый мусор", covered_count=3)
+
+        result = await svc.rebuild(1)
+
+        assert result == "Первая сводка"
+        assert memory.count_messages(1) == 8
+        rebuilt = memory.get_summary(1)
+        assert rebuilt is not None
+        assert rebuilt.summary == "Первая сводка"
+        assert rebuilt.covered_count == 3
+        prompt = llm.complete.await_args.args[0]
+        assert "Старый мусор" not in prompt[1]["content"]
+
+
+@pytest.mark.asyncio
+async def test_rebuild_uses_bounded_chronological_batches(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("app.services.summary_service.REBUILD_BATCH_SIZE", 3)
+    svc, memory, llm, db = _make(tmp_path, window=2, interval=1)
+    llm.complete = AsyncMock(side_effect=["Часть 1", "Часть 2", "Часть 3"])
+    with db:
+        _fill(memory, 1, 10)  # 8 messages are older than the live window
+
+        await svc.rebuild(1)
+
+        assert llm.complete.await_count == 3
+        assert memory.get_summary(1).covered_count == 8
+        second_prompt = llm.complete.await_args_list[1].args[0][1]["content"]
+        assert "Текущая сводка:\nЧасть 1" in second_prompt

@@ -6,6 +6,7 @@ Auth is via Telegram Mini App initData in the X-Telegram-Init-Data header.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from typing import Any
@@ -28,6 +29,7 @@ from app.services.profile_service import ProfileService
 from app.services.reply_service import ReplyService
 from app.services.settings_service import SettingsService
 from app.services.suggestions_service import SuggestionsService
+from app.services.summary_service import SummaryService
 
 logger = logging.getLogger(__name__)
 
@@ -130,6 +132,7 @@ def create_admin_router(
     fact_categories_service: FactCategoriesService | None = None,
     examples_service: ContactExamplesService | None = None,
     suggestions_service: SuggestionsService | None = None,
+    summary_service: SummaryService | None = None,
     *,
     mini_app_dev: bool = False,
     dev_user_id: int | None = None,
@@ -137,6 +140,8 @@ def create_admin_router(
     """Build admin API routes with injected services."""
 
     router = APIRouter(prefix="/admin", tags=["admin"])
+    memory_rebuild_tasks: dict[int, asyncio.Task[None]] = {}
+    memory_rebuild_status: dict[int, dict[str, Any]] = {}
 
     # -----------------------------------------------------------------------
     # Auth dependency
@@ -223,9 +228,7 @@ def create_admin_router(
             except (json.JSONDecodeError, TypeError):
                 boundaries_parsed = None
 
-        contact_facts = (
-            facts_service.facts_structured(user_id) if facts_service is not None else {}
-        )
+        contact_facts = facts_service.facts_structured(user_id) if facts_service is not None else {}
 
         style = memory_service.get_style_profile(user_id)
 
@@ -552,6 +555,46 @@ def create_admin_router(
             raise HTTPException(status_code=503, detail="Facts service not enabled")
         facts_service.clear_facts(user_id)
         return {}
+
+    async def _run_memory_rebuild(user_id: int) -> None:
+        assert summary_service is not None
+        assert facts_service is not None
+        try:
+            summary = await summary_service.rebuild(user_id)
+            await facts_service.rebuild(user_id)
+            memory_rebuild_status[user_id] = {
+                "status": "completed",
+                "message_count": memory_service.count_messages(user_id),
+                "summary": summary,
+                "facts": facts_service.facts_structured(user_id),
+            }
+        except Exception:
+            logger.exception("Failed to rebuild memory for contact %s", user_id)
+            memory_rebuild_status[user_id] = {
+                "status": "failed",
+                "detail": "Не удалось пересобрать память",
+            }
+
+    @router.post("/users/{user_id}/memory/rebuild")
+    async def rebuild_derived_memory(user_id: int, caller_id: int = AdminUser) -> dict[str, Any]:
+        """Start a background rebuild while preserving messages and curated data."""
+        if summary_service is None or facts_service is None:
+            raise HTTPException(status_code=503, detail="Memory rebuild is not available")
+        if memory_service.count_messages(user_id) == 0:
+            raise HTTPException(status_code=422, detail="У контакта нет истории сообщений")
+        existing = memory_rebuild_tasks.get(user_id)
+        if existing is not None and not existing.done():
+            raise HTTPException(status_code=409, detail="Пересборка уже выполняется")
+
+        memory_rebuild_status[user_id] = {"status": "running"}
+        task = asyncio.create_task(_run_memory_rebuild(user_id))
+        memory_rebuild_tasks[user_id] = task
+        return {"status": "started"}
+
+    @router.get("/users/{user_id}/memory/rebuild")
+    async def get_memory_rebuild_status(user_id: int, caller_id: int = AdminUser) -> dict[str, Any]:
+        """Return the latest background rebuild status for a contact."""
+        return memory_rebuild_status.get(user_id, {"status": "idle"})
 
     # -----------------------------------------------------------------------
     # Few-shot examples (curated ideal replies)

@@ -89,6 +89,11 @@ class MemoryService:
         )
         return self.repository.set_summary(item)
 
+    def delete_summary(self, user_id: int) -> None:
+        """Delete only the derived summary while preserving chat messages."""
+
+        self.repository.delete_summary(user_id)
+
     def clear_messages(self, user_id: int) -> None:
         """Delete all conversation messages for a key (used to reset a thread)."""
 

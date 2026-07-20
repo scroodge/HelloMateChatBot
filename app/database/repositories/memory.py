@@ -54,6 +54,8 @@ class MemoryRepository(Protocol):
 
     def set_summary(self, summary: ConversationSummary) -> ConversationSummary: ...
 
+    def delete_summary(self, user_id: int) -> None: ...
+
     def get_style_profile(self, user_id: int) -> ContactStyleProfile | None: ...
 
     def set_style_profile(self, profile: ContactStyleProfile) -> ContactStyleProfile: ...
@@ -180,9 +182,7 @@ class MemoryRepositoryImpl:
     def clear_messages(self, user_id: int) -> None:
         with self._db.engine.begin() as connection:
             connection.execute(
-                delete(conversation_messages).where(
-                    conversation_messages.c.user_id == user_id
-                )
+                delete(conversation_messages).where(conversation_messages.c.user_id == user_id)
             )
 
     def list_messages_asc(
@@ -264,6 +264,12 @@ class MemoryRepositoryImpl:
                 update_columns=["summary", "covered_count", "updated_at"],
             )
         return summary
+
+    def delete_summary(self, user_id: int) -> None:
+        with self._db.engine.begin() as connection:
+            connection.execute(
+                delete(conversation_summaries).where(conversation_summaries.c.user_id == user_id)
+            )
 
     def get_style_profile(self, user_id: int) -> ContactStyleProfile | None:
         with self._db.engine.connect() as connection:

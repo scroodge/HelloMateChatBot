@@ -18,6 +18,8 @@ from app.services.settings_service import SettingsService
 
 logger = logging.getLogger(__name__)
 
+REBUILD_BATCH_SIZE = 100
+
 
 def _build_summary_messages(
     existing_summary: str | None,
@@ -157,5 +159,53 @@ class SummaryService:
             logger.info("Summary refreshed for contact %s (covered %d msgs)", user_id, num_older)
         except Exception:
             logger.exception("Failed to refresh summary for contact %s", user_id)
+        finally:
+            self._in_progress.discard(user_id)
+
+    async def rebuild(self, user_id: int) -> str | None:
+        """Recreate the derived summary from history without deleting messages.
+
+        Old messages are folded in bounded chronological batches so a long chat
+        never becomes one oversized LLM request.
+        """
+
+        if not self.enabled:
+            return None
+        if user_id in self._in_progress:
+            raise RuntimeError("Summary refresh is already in progress")
+
+        self._in_progress.add(user_id)
+        try:
+            self.memory_service.delete_summary(user_id)
+            total = self.memory_service.count_messages(user_id)
+            num_older = max(0, total - self.window_size)
+            if num_older == 0:
+                return None
+
+            language = self.settings_service.get_language(user_id)
+            covered = 0
+            summary: str | None = None
+            while covered < num_older:
+                batch_size = min(REBUILD_BATCH_SIZE, num_older - covered)
+                messages = self.memory_service.messages_slice(
+                    user_id, offset=covered, limit=batch_size
+                )
+                if not messages:
+                    break
+                prompt = _build_summary_messages(
+                    summary,
+                    [{"role": m.role, "content": m.content} for m in messages],
+                    language,
+                    self.max_chars,
+                )
+                rebuilt = (await self.llm_service.complete(prompt)).strip()
+                if not rebuilt:
+                    raise RuntimeError("LLM returned an empty summary")
+                summary = rebuilt[: self.max_chars]
+                covered += len(messages)
+                self.memory_service.set_summary(user_id, summary, covered_count=covered)
+
+            logger.info("Summary rebuilt for contact %s (covered %d msgs)", user_id, covered)
+            return summary
         finally:
             self._in_progress.discard(user_id)

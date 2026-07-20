@@ -89,16 +89,13 @@ class ContactFactsRepositoryImpl(ContactFactsRepository):
 
     def clear_facts(self, user_id: int) -> None:
         with self._db.engine.begin() as conn:
-            conn.execute(
-                delete(contact_facts).where(contact_facts.c.user_id == user_id)
-            )
+            conn.execute(delete(contact_facts).where(contact_facts.c.user_id == user_id))
+            conn.execute(delete(contact_facts_meta).where(contact_facts_meta.c.user_id == user_id))
 
     def get_meta(self, user_id: int) -> ContactFactsMeta | None:
         with self._db.engine.connect() as conn:
             row = conn.execute(
-                select(contact_facts_meta).where(
-                    contact_facts_meta.c.user_id == user_id
-                )
+                select(contact_facts_meta).where(contact_facts_meta.c.user_id == user_id)
             ).fetchone()
         if row is None:
             return None
@@ -112,9 +109,7 @@ class ContactFactsRepositoryImpl(ContactFactsRepository):
         now = datetime.now().astimezone().isoformat()
         with self._db.engine.begin() as conn:
             existing = conn.execute(
-                select(contact_facts_meta).where(
-                    contact_facts_meta.c.user_id == user_id
-                )
+                select(contact_facts_meta).where(contact_facts_meta.c.user_id == user_id)
             ).fetchone()
             if existing is None:
                 conn.execute(

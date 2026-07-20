@@ -24,6 +24,7 @@ from app.services.profile_service import ProfileService
 from app.services.reply_service import ReplyService
 from app.services.settings_service import SettingsService
 from app.services.suggestions_service import SuggestionsService
+from app.services.summary_service import SummaryService
 from app.services.weather_service import WeatherService
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
@@ -78,6 +79,15 @@ def create_api_app(config: Config, database: Database) -> FastAPI:
         enabled=config.facts_enabled and config.ai_replies_enabled,
         categories_service=fact_categories_service,
     )
+    summary_service = SummaryService(
+        memory_service=memory_service,
+        llm_service=llm_service,
+        settings_service=settings_service,
+        window_size=config.memory_window_size,
+        refresh_interval=config.summary_refresh_interval,
+        max_chars=config.summary_max_chars,
+        enabled=config.summary_enabled and config.ai_replies_enabled,
+    )
     examples_service = ContactExamplesService(database.examples)
     suggestions_service = SuggestionsService(database.suggestions)
     reply_service = ReplyService(
@@ -124,6 +134,7 @@ def create_api_app(config: Config, database: Database) -> FastAPI:
             fact_categories_service=fact_categories_service,
             examples_service=examples_service,
             suggestions_service=suggestions_service,
+            summary_service=summary_service,
             mini_app_dev=config.mini_app_dev,
             dev_user_id=dev_user_id,
         ),

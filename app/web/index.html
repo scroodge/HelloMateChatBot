@@ -536,6 +536,15 @@
     </div><!-- /dtab-persona -->
 
     <div class="subtab" id="dtab-facts" style="display:none">
+    <div class="card">
+      <div class="card-title">Производная память</div>
+      <div style="font-size:11px;color:var(--hint);margin-bottom:8px">
+        Пересобирает резюме и автоматически извлечённые факты из всей истории. Переписка, персона, стиль и эталонные ответы сохраняются.
+      </div>
+      <button class="btn btn-sm btn-secondary" id="rebuild-memory-btn" onclick="rebuildMemory(this)" style="width:auto">
+        ↻ Пересобрать память
+      </button>
+    </div>
     <!-- learned style -->
     <div class="card" id="style-card" style="display:none">
       <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
@@ -1345,6 +1354,37 @@ async function clearAllFacts() {
   } catch(e) {
     tg.showAlert('Ошибка: ' + e.message);
   }
+}
+
+async function rebuildMemory(btn) {
+  if (!currentUserId) return;
+  tg.showConfirm('Пересобрать резюме и факты из всей истории? Переписка, персона, стиль и примеры сохранятся.', async (ok) => {
+    if (!ok) return;
+    const original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Пересобираю…';
+    try {
+      const rebuildUserId = currentUserId;
+      await post(`/admin/users/${rebuildUserId}/memory/rebuild`);
+      while (true) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        const result = await get(`/admin/users/${rebuildUserId}/memory/rebuild`);
+        if (result.status === 'running') continue;
+        if (result.status === 'failed') throw new Error(result.detail || 'Пересборка не удалась');
+        if (result.status === 'completed') {
+          if (currentUserId === rebuildUserId) renderFacts(result.facts || {});
+          toast(`Память пересобрана из ${result.message_count} сообщений`);
+          break;
+        }
+        throw new Error('Неизвестный статус пересборки');
+      }
+    } catch(e) {
+      tg.showAlert('Ошибка: ' + e.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = original;
+    }
+  });
 }
 
 // ── Few-shot examples ─────────────────────────────────────────────────────────

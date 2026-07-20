@@ -78,6 +78,7 @@ BUILTIN_LABELS = {
 
 # Hard cap on how many values a multi-valued fact may accumulate.
 MAX_FACT_VALUES = 15
+REBUILD_BATCH_SIZE = 50
 
 _JSON_FENCE = re.compile(r"```(?:json)?\s*(.*?)```", re.DOTALL)
 
@@ -470,3 +471,58 @@ class ContactFactsService:
             len(self.facts_as_dict(user_id)),
             len(new_facts),
         )
+
+    async def rebuild(self, user_id: int) -> dict[str, str]:
+        """Re-extract facts from the full history in chronological batches."""
+
+        if not self.enabled:
+            return {}
+        if user_id in self._in_progress:
+            raise RuntimeError("Fact extraction is already in progress")
+
+        self._in_progress.add(user_id)
+        try:
+            self.clear_facts(user_id)
+            total = self.memory_service.count_messages(user_id)
+            language = self.settings_service.get_language(user_id)
+            extra_categories = (
+                [
+                    (str(c["key"]), str(c["label"]))
+                    for c in self.categories_service.list_categories()
+                ]
+                if self.categories_service
+                else None
+            )
+            allowed_keys = self._allowed_keys()
+            multi_keys = set(self._multi_keys())
+
+            offset = 0
+            while offset < total:
+                messages = self.memory_service.messages_slice(
+                    user_id, offset=offset, limit=REBUILD_BATCH_SIZE
+                )
+                if not messages:
+                    break
+                prompt = _build_extraction_messages(
+                    [{"role": m.role, "content": m.content} for m in messages],
+                    self.facts_as_dict(user_id),
+                    language,
+                    extra_keys=extra_categories,
+                    multi_keys=multi_keys,
+                )
+                raw = (await self.llm_service.complete(prompt)).strip()
+                for key, value in _parse_facts_json(raw, allowed_keys).items():
+                    self.set_fact(user_id, key, value)
+                offset += len(messages)
+
+            self.repository.set_meta(user_id, total)
+            facts = self.facts_as_dict(user_id)
+            logger.info(
+                "Facts rebuilt for contact %s from %d msgs: %d facts",
+                user_id,
+                offset,
+                len(facts),
+            )
+            return facts
+        finally:
+            self._in_progress.discard(user_id)
