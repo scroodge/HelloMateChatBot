@@ -803,6 +803,8 @@ let selectedPreset = null;
 let topicTags = [];
 let boundaryTags = [];
 let contactsCache = [];
+let suggestionsRenderKey = null;
+let suggestionsLoading = false;
 let personaTab = 'preset';
 let historyState = {
   userId: null,
@@ -1489,10 +1491,34 @@ function updateSuggestBadge(n) {
   else { b.textContent = ''; b.hidden = true; }
 }
 
-async function loadSuggestions() {
+function captureSuggestionEdits() {
+  const edits = {};
+  document.querySelectorAll('[id^="sugg-text-"]').forEach(textarea => {
+    const id = textarea.id.replace('sugg-text-', '');
+    edits[id] = {
+      reply_text: textarea.value,
+      reason: document.getElementById('sugg-reason-' + id)?.value || '',
+    };
+  });
+  return edits;
+}
+
+function restoreSuggestionEdits(edits) {
+  Object.entries(edits).forEach(([id, edit]) => {
+    const textarea = document.getElementById('sugg-text-' + id);
+    const reason = document.getElementById('sugg-reason-' + id);
+    if (textarea) textarea.value = edit.reply_text;
+    if (reason) reason.value = edit.reason;
+  });
+}
+
+async function loadSuggestions({ silent = false } = {}) {
   const el = document.getElementById('suggestions-list');
   const analyticsEl = document.getElementById('suggestions-analytics');
-  el.innerHTML = '<div class="spinner">Загрузка...</div>';
+  if (suggestionsLoading) return;
+  suggestionsLoading = true;
+  const edits = silent ? captureSuggestionEdits() : {};
+  if (!silent) el.innerHTML = '<div class="spinner">Загрузка...</div>';
   try {
     const [items, analytics] = await Promise.all([
       get('/admin/suggestions'), get('/admin/analytics/feedback')
@@ -1504,6 +1530,11 @@ async function loadSuggestions() {
       ${(analytics.providers || []).map(p => `<div class="contact-meta">${escHtml(p.provider)} / ${escHtml(p.model)}: ${p.latency_ms} мс, ошибок: ${p.errors}</div>`).join('')}`;
     const readyCount = items.filter(s => s.status === 'ready' || !s.status).length;
     updateSuggestBadge(readyCount);
+    const nextRenderKey = JSON.stringify(items.map(s => [
+      s.id, s.user_id, s.status, s.contact_message, s.draft_text, s.error, s.created_at,
+    ]));
+    if (silent && nextRenderKey === suggestionsRenderKey) return;
+    suggestionsRenderKey = nextRenderKey;
     if (!items.length) {
       el.innerHTML = '<div class="empty">Нет новых подсказок — всё разобрано 🎉</div>';
       return;
@@ -1546,9 +1577,12 @@ async function loadSuggestions() {
         </div>
       </div>`;
     }).join('');
+    restoreSuggestionEdits(edits);
   } catch(e) {
     analyticsEl.style.display = 'none';
-    el.innerHTML = `<div class="error">Ошибка: ${e.message}</div>`;
+    if (!silent) el.innerHTML = `<div class="error">Ошибка: ${e.message}</div>`;
+  } finally {
+    suggestionsLoading = false;
   }
 }
 
@@ -1938,7 +1972,7 @@ if (!initData && !isLocalDev) {
       renderContacts();
       const items = await get('/admin/suggestions');
       updateSuggestBadge(items.filter(s => s.status === 'ready' || !s.status).length);
-      if (document.getElementById('page-suggestions')?.classList.contains('active')) loadSuggestions();
+      if (document.getElementById('page-suggestions')?.classList.contains('active')) loadSuggestions({ silent: true });
     } catch (_) { /* transient polling errors are harmless */ }
   }, 3000);
 }

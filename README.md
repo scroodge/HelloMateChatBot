@@ -199,6 +199,10 @@ Owner identity in prompts: set `OWNER_NAME` and `BOT_NAME` in `.env`.
 
 ## Update From Git
 
+For the complete feature iteration, Contabo deployment, production
+verification, documentation, and agent-memory workflow, see
+[docs/ITERATION_PIPELINE.md](docs/ITERATION_PIPELINE.md).
+
 Use the included production-friendly update script:
 
 ```bash

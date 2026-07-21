@@ -318,6 +318,20 @@ live Ollama comparisons запускаются отдельно и сохран�
   и сохраняется в ignored `evals/reports/`; модель и production routing не
   менялись.
 
+### Processing status rollout (2026-07-21)
+
+- Mini App показывает live-состояния contact reply pipeline: `queued`,
+  `generating` и `failed`.
+- «Подсказки» показывает состояние до появления готового draft, а «Контакты»
+  показывает status badge для конкретного контакта.
+- API и Telegram handler используют thread-safe in-process registry;
+  завершённые suggestions по-прежнему сохраняются в существующей БД.
+- Добавлены token checks, чтобы устаревшая debounce/generation task не могла
+  перезаписать status нового сообщения.
+- Verification: 246 pytest tests passed; production deployed to Contabo
+  `/opt/hellomate`, commit `7c632b5`, container `hellomate-bot` up, Mini App
+  HTTP 200, unauthenticated admin HTTP 401, no startup errors.
+
 ---
 
 ## Phase 20 — Context Compiler 2.0
