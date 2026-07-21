@@ -340,22 +340,35 @@ def create_admin_router(
         return candidate_evaluation_service.list() if candidate_evaluation_service else []
 
     @router.get("/eval-candidates/defaults")
-    async def eval_candidate_defaults(caller_id: int = AdminUser) -> dict[str, str]:
+    async def eval_candidate_defaults(caller_id: int = AdminUser) -> dict[str, object]:
         if candidate_evaluation_service is None:
             raise HTTPException(status_code=503, detail="Candidate lab is not enabled")
-        return {**candidate_evaluation_service.defaults(), "credential_ids": candidate_evaluation_service.credential_ids()}
+        return {
+            **candidate_evaluation_service.defaults(),
+            "credential_ids": candidate_evaluation_service.credential_ids(),
+        }
 
     @router.post("/eval-candidates")
-    async def add_eval_candidate(request: CandidateWriteRequest, caller_id: int = AdminUser) -> dict[str, object]:
+    async def add_eval_candidate(
+        request: CandidateWriteRequest, caller_id: int = AdminUser
+    ) -> dict[str, object]:
         if candidate_evaluation_service is None:
             raise HTTPException(status_code=503, detail="Candidate lab is not enabled")
         try:
-            return candidate_evaluation_service.add(request.name, request.provider, request.model, request.base_url, request.credential_id)
+            return candidate_evaluation_service.add(
+                request.name,
+                request.provider,
+                request.model,
+                request.base_url,
+                request.credential_id,
+            )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @router.post("/eval-candidates/{candidate_id}/evaluate")
-    async def evaluate_candidate(candidate_id: str, caller_id: int = AdminUser) -> dict[str, object]:
+    async def evaluate_candidate(
+        candidate_id: str, caller_id: int = AdminUser
+    ) -> dict[str, object]:
         if candidate_evaluation_service is None:
             raise HTTPException(status_code=503, detail="Candidate lab is not enabled")
         result = await candidate_evaluation_service.evaluate(candidate_id)

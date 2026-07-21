@@ -707,11 +707,12 @@
   <div class="page" id="page-candidates">
     <div class="card"><div class="card-title">Кандидат для проверки</div>
       <div class="activity-lede">Ключи остаются на сервере. Проверка не меняет рабочую модель.</div>
-      <label>Название</label><input id="candidate-name" placeholder="Qwen 14B">
-      <label>Provider</label><select id="candidate-provider"><option value="ollama">Ollama</option><option value="openai">OpenAI-compatible</option></select>
-      <label>Модель</label><input id="candidate-model" placeholder="qwen2.5:14b">
-      <label>Base URL, необязательно</label><input id="candidate-url" placeholder="использовать текущий сервер">
-      <label>Серверный ключ</label><select id="candidate-credential"></select>
+      <label>Название</label><input type="text" id="candidate-name" placeholder="Например, OpenRouter тест">
+      <label>Провайдер</label><select id="candidate-provider"><option value="ollama">Ollama</option><option value="openai">OpenAI-compatible</option></select>
+      <label>Модель</label><input type="text" id="candidate-model" placeholder="ID модели у провайдера">
+      <label>Base URL</label><input type="text" id="candidate-url" placeholder="Например, https://openrouter.ai/api">
+      <label>Серверный ключ</label><select id="candidate-credential"><option value="" selected disabled>Загрузка ключей…</option></select>
+      <div id="candidate-form-error" class="error" hidden></div>
       <button class="btn" onclick="addEvalCandidate()">Добавить кандидата</button></div>
     <div class="card"><div class="card-title">Проверки</div><div id="candidate-list" class="activity-meta">Загрузка...</div></div>
   </div>
@@ -2176,6 +2177,7 @@ async function loadGlobalSettings() {
 
 async function loadEvalCandidates() {
   const el = document.getElementById('candidate-list');
+  const formError = document.getElementById('candidate-form-error');
   try {
     const [items, defaults] = await Promise.all([get('/admin/eval-candidates'), get('/admin/eval-candidates/defaults')]);
     const providerInput = document.getElementById('candidate-provider');
@@ -2186,16 +2188,24 @@ async function loadEvalCandidates() {
       document.getElementById('candidate-credential').innerHTML = (defaults.credential_ids || ['default']).map(id => `<option value="${escHtml(id)}">${escHtml(id)}</option>`).join('');
       providerInput.dataset.initialized = 'true';
     }
+    formError.hidden = true;
     el.innerHTML = items.length ? items.map(item => {
       const report = item.summary ? ` · ${Math.round(item.summary.pass_rate * 100)}% пройдено · ${item.summary.hard_failure_count} hard failures` : '';
       const verdict = item.status === 'passed' ? 'Прошёл baseline, всё ещё не влияет на ответы' : item.status === 'failed' ? 'Не прошёл, routing не меняется' : 'Ещё не проверен';
       return `<div class="activity-row"><div class="activity-copy"><div class="activity-title">${escHtml(item.name)} · ${escHtml(item.model)}</div><div class="activity-meta">${escHtml(verdict)}${report}</div><button class="btn btn-sm" style="width:auto;margin-top:7px" onclick="runEvalCandidate('${escHtml(item.id)}')">Проверить снова</button></div></div>`;
     }).join('') : 'Добавь кандидата, затем запусти проверку.';
-  } catch (e) { el.innerHTML = `<div class="error">${escHtml(e.message)}</div>`; }
+  } catch (e) {
+    const message = `Не удалось загрузить серверные ключи: ${e.message}`;
+    formError.textContent = message;
+    formError.hidden = false;
+    el.innerHTML = `<div class="error">${escHtml(message)}</div>`;
+  }
 }
 async function addEvalCandidate() {
   try {
-    await post('/admin/eval-candidates', {name: document.getElementById('candidate-name').value, provider: document.getElementById('candidate-provider').value, model: document.getElementById('candidate-model').value, base_url: document.getElementById('candidate-url').value, credential_id: document.getElementById('candidate-credential').value});
+    const credentialId = document.getElementById('candidate-credential').value;
+    if (!credentialId) throw new Error('Дождитесь загрузки серверных ключей');
+    await post('/admin/eval-candidates', {name: document.getElementById('candidate-name').value, provider: document.getElementById('candidate-provider').value, model: document.getElementById('candidate-model').value, base_url: document.getElementById('candidate-url').value, credential_id: credentialId});
     toast('Кандидат добавлен'); loadEvalCandidates();
   } catch (e) { tg.showAlert?.('Ошибка: ' + e.message); }
 }

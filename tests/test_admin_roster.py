@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from app.api.admin_routes import create_admin_router
 from app.database.db import Database
 from app.models.memory import ConversationMessage
+from app.services.candidate_evaluation_service import CandidateEvaluationService
 from app.services.examples_service import ContactExamplesService
 from app.services.greeting_rules_service import GreetingRulesService
 from app.services.greeting_service import GreetingService
@@ -55,6 +56,10 @@ def _make_client(db: Database) -> tuple[TestClient, ProfileService, SettingsServ
         settings_service=settings_service,
         enabled=False,
     )
+    candidate_evaluation_service = CandidateEvaluationService(
+        settings_service,
+        MagicMock(llm_provider="ollama", llm_model="test", llm_base_url="http://ollama"),
+    )
 
     app = FastAPI()
     app.include_router(
@@ -75,12 +80,28 @@ def _make_client(db: Database) -> tuple[TestClient, ProfileService, SettingsServ
             suggestions_service=suggestions_service,
             owner_reply_pairing_service=owner_reply_pairing_service,
             learning_proposals_service=learning_proposals_service,
+            candidate_evaluation_service=candidate_evaluation_service,
             mini_app_dev=True,  # bypass Telegram auth in tests
             dev_user_id=ADMIN_ID,
         ),
         prefix="/api",
     )
     return TestClient(app), profile_service, settings_service
+
+
+def test_eval_candidate_defaults_exposes_credential_ids(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("EVAL_PROVIDER_KEYS_JSON", '{"openrouter":"secret", "openai":"secret"}')
+    with Database(f"sqlite:///{tmp_path / 'candidate-defaults.db'}") as db:
+        client, _, _ = _make_client(db)
+        response = client.get("/api/admin/eval-candidates/defaults")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "provider": "ollama",
+        "model": "test",
+        "base_url": "http://ollama",
+        "credential_ids": ["default", "openrouter", "openai"],
+    }
 
 
 def test_roster_includes_profile_only_contacts(tmp_path) -> None:
