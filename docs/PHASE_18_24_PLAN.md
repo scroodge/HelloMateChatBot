@@ -1,6 +1,6 @@
 # HelloMate — план развития Phase 18–24
 
-_Статус: proposal · Последнее обновление: 2026-07-21_
+_Статус: Phase 18 реализован и deployed; Phase 19–24 proposal · Последнее обновление: 2026-07-21_
 
 ## 1. Цель
 
@@ -105,6 +105,8 @@ latency, model version и trace metadata.
 
 ## Phase 18 — Feedback Foundation
 
+_Статус: реализован и deployed в production (commit `094bace`, 2026-07-21)._
+
 **Цель:** сделать каждую генерацию наблюдаемой, а действие владельца — пригодным
 для анализа и будущего обучения.
 
@@ -208,6 +210,16 @@ Trace ссылается на существующие message/suggestion IDs. �
 - raw prompt не попадает в обычные logs;
 - существующие tests зелёные, добавлены repository/service/API tests;
 - модель и production routing не изменены.
+
+### Фактический результат
+
+- `GenerationRequest` / `GenerationResult` добавлены в `app/models/generation.py`;
+- Ollama и OpenAI-compatible adapters сохраняют provider/model, usage, finish reason и latency;
+- добавлены `generation_runs`, `feedback_events`, `suggestion_outcomes` и Alembic migration `112233aabbcc`;
+- Suggest Inbox записывает lifecycle feedback, причины решений, edit distances, decision time и similarity;
+- Mini App показывает feedback/provider analytics и поддерживает accept/copy/dismiss/save с причиной;
+- production migration прошла на `/opt/hellomate` на `contabo`, `hellomate-bot` запущен, Mini App отвечает HTTP 200;
+- verification: 240 pytest tests passed, Ruff passed, Mini App JavaScript syntax passed.
 
 ---
 
@@ -660,8 +672,8 @@ selection всё ещё остаётся Phase 24.
 - один быстрый rollback switch;
 - eval report до и после изменения.
 
-План является proposal, а не описанием уже выпущенного поведения. Выполненный
-slice отмечается здесь только после реализации и проверки.
+План остаётся proposal для Phase 19–24. Выполненные slices отмечаются здесь
+только после реализации, проверки и production rollout.
 
 ## 9. Внешние ориентиры
 
@@ -674,4 +686,3 @@ slice отмечается здесь только после реализаци
 - OpenTelemetry GenAI conventions следует использовать осторожно: часть
   conventions всё ещё может меняться:
   <https://opentelemetry.io/docs/specs/semconv/>
-
