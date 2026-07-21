@@ -89,12 +89,17 @@ class CandidateEvaluationService:
     def _provider(self, candidate: dict[str, object]) -> object:
         base_url = str(candidate["base_url"]) or self.config.llm_base_url
         if candidate["provider"] == "openai":
+            is_direct_openai_gpt5 = (
+                base_url.rstrip("/") == "https://api.openai.com"
+                and str(candidate["model"]).startswith("gpt-5")
+            )
             return OpenAIProvider(
                 base_url,
                 str(candidate["model"]),
                 self._credential(candidate),
-                max_tokens=512,
+                max_tokens=1024 if is_direct_openai_gpt5 else 512,
                 temperature=0.0,
+                reasoning_effort="minimal" if is_direct_openai_gpt5 else None,
             )
         return OllamaProvider(base_url, str(candidate["model"]), max_tokens=512, temperature=0.0)
 

@@ -77,7 +77,13 @@ async def test_openai_provider_complete(monkeypatch: pytest.MonkeyPatch) -> None
 async def test_openai_gpt5_provider_uses_max_completion_tokens(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    provider = OpenAIProvider("https://api.openai.com", "gpt-5-mini", "secret", 128)
+    provider = OpenAIProvider(
+        "https://api.openai.com",
+        "gpt-5-mini",
+        "secret",
+        128,
+        reasoning_effort="minimal",
+    )
 
     class MockResponse:
         def raise_for_status(self) -> None:
@@ -105,6 +111,7 @@ async def test_openai_gpt5_provider_uses_max_completion_tokens(
             assert "max_tokens" not in json
             assert "temperature" not in json
             assert "stop" not in json
+            assert json["reasoning_effort"] == "minimal"
             return MockResponse()
 
     monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: MockClient())

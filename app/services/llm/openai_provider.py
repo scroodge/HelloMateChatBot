@@ -24,13 +24,20 @@ class OpenAIProvider:
         return self.base_url == "https://api.openai.com" and self.model.startswith("gpt-5")
 
     def __init__(
-        self, base_url: str, model: str, api_key: str, max_tokens: int, temperature: float = 0.7
+        self,
+        base_url: str,
+        model: str,
+        api_key: str,
+        max_tokens: int,
+        temperature: float = 0.7,
+        reasoning_effort: str | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.api_key = api_key
         self.max_tokens = max_tokens
         self.temperature = temperature
+        self.reasoning_effort = reasoning_effort
 
     async def generate(self, request: GenerationRequest) -> GenerationResult:
         from time import monotonic
@@ -48,6 +55,8 @@ class OpenAIProvider:
         )
         if not self._uses_completion_tokens:
             payload["temperature"] = self.temperature
+        elif self.reasoning_effort is not None:
+            payload["reasoning_effort"] = self.reasoning_effort
         if not self._uses_completion_tokens:
             payload["stop"] = self._STOP
         headers = {"Authorization": f"Bearer {self.api_key}"}

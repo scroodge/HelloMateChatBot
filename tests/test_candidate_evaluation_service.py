@@ -56,3 +56,23 @@ async def test_evaluation_provider_failure_is_saved_not_raised(
     assert result["status"] == "failed"
     assert result["summary"]["error"] == "provider rejected request"
     assert json.loads(settings.value)[0]["status"] == "failed"
+
+
+def test_direct_openai_gpt5_candidate_gets_reasoning_budget() -> None:
+    service = CandidateEvaluationService(
+        FakeSettings("[]"),
+        MagicMock(llm_provider="ollama", llm_model="test", llm_base_url="http://ollama"),
+    )
+    service._credential = lambda candidate: "secret"  # type: ignore[method-assign]
+
+    provider = service._provider(
+        {
+            "provider": "openai",
+            "model": "gpt-5-mini",
+            "base_url": "https://api.openai.com",
+            "credential_id": "openai",
+        }
+    )
+
+    assert provider.max_tokens == 1024
+    assert provider.reasoning_effort == "minimal"
