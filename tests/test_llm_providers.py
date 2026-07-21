@@ -62,8 +62,47 @@ async def test_openai_provider_complete(monkeypatch: pytest.MonkeyPatch) -> None
         ) -> MockResponse:
             assert url.endswith("/v1/chat/completions")
             assert headers["Authorization"] == "Bearer secret"
+            assert json["max_tokens"] == 128
+            assert "max_completion_tokens" not in json
             return MockResponse()
 
     monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: MockClient())
     result = await provider.complete([{"role": "user", "content": "Hi"}])
     assert result == "Hello from OpenAI"
+
+
+@pytest.mark.asyncio
+async def test_openai_gpt5_provider_uses_max_completion_tokens(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = OpenAIProvider("https://api.openai.com", "gpt-5-mini", "secret", 128)
+
+    class MockResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return {"choices": [{"message": {"content": "Hello from GPT-5"}}]}
+
+    class MockClient:
+        async def __aenter__(self) -> MockClient:
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        async def post(
+            self,
+            url: str,
+            json: dict[str, object],
+            headers: dict[str, str],
+        ) -> MockResponse:
+            assert url.endswith("/v1/chat/completions")
+            assert headers["Authorization"] == "Bearer secret"
+            assert json["max_completion_tokens"] == 128
+            assert "max_tokens" not in json
+            return MockResponse()
+
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: MockClient())
+    result = await provider.complete([{"role": "user", "content": "Hi"}])
+    assert result == "Hello from GPT-5"

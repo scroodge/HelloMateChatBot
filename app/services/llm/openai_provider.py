@@ -13,6 +13,16 @@ class OpenAIProvider:
     _STOP = ["\nКонтакт:", "\nContact:", "\nОтвет:", "\nReply:"]
     provider_name = "openai"
 
+    @property
+    def _uses_completion_tokens(self) -> bool:
+        """GPT-5 rejects the legacy ``max_tokens`` Chat Completions field.
+
+        OpenRouter and other compatible endpoints retain their existing payload
+        shape, so this is intentionally limited to OpenAI's first-party API.
+        """
+
+        return self.base_url == "https://api.openai.com" and self.model.startswith("gpt-5")
+
     def __init__(
         self, base_url: str, model: str, api_key: str, max_tokens: int, temperature: float = 0.7
     ) -> None:
@@ -32,10 +42,12 @@ class OpenAIProvider:
         payload = {
             "model": self.model,
             "messages": request.messages,
-            "max_tokens": self.max_tokens,
             "temperature": self.temperature,
             "stop": self._STOP,
         }
+        payload["max_completion_tokens" if self._uses_completion_tokens else "max_tokens"] = (
+            self.max_tokens
+        )
         headers = {"Authorization": f"Bearer {self.api_key}"}
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
