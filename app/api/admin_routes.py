@@ -27,6 +27,7 @@ from app.services.memory_service import MemoryService
 from app.services.mood_service import MoodService
 from app.services.persona_service import PersonaService
 from app.services.profile_service import ProfileService
+from app.services.processing_status_service import ProcessingStatusService
 from app.services.reply_service import ReplyService
 from app.services.settings_service import SettingsService
 from app.services.suggestions_service import SuggestionsService
@@ -145,6 +146,7 @@ def create_admin_router(
     suggestions_service: SuggestionsService | None = None,
     summary_service: SummaryService | None = None,
     feedback_repository: FeedbackRepositoryImpl | None = None,
+    processing_status_service: ProcessingStatusService | None = None,
     *,
     mini_app_dev: bool = False,
     dev_user_id: int | None = None,
@@ -208,6 +210,16 @@ def create_admin_router(
                         examples_service.repository.count_examples(user_id)
                         if examples_service is not None
                         else 0
+                    ),
+                    "llm_status": (
+                        processing_status_service.get(user_id).status
+                        if processing_status_service and processing_status_service.get(user_id)
+                        else None
+                    ),
+                    "llm_status_updated_at": (
+                        processing_status_service.get(user_id).updated_at.isoformat()
+                        if processing_status_service and processing_status_service.get(user_id)
+                        else None
                     ),
                 }
             )
@@ -701,6 +713,19 @@ def create_admin_router(
             return []
         profiles = {p.user_id: p for p in profile_service.list_profiles()}
         out = []
+        if processing_status_service is not None:
+            for status in processing_status_service.list():
+                profile = profiles.get(status.user_id)
+                out.append({
+                    "id": None,
+                    "user_id": status.user_id,
+                    "display_name": profile.display_name if profile else None,
+                    "contact_message": status.message,
+                    "draft_text": None,
+                    "status": status.status,
+                    "error": status.error,
+                    "created_at": status.updated_at.isoformat(),
+                })
         for s in suggestions_service.list_pending():
             suggestions_service.viewed(s.id)
             profile = profiles.get(s.user_id)
@@ -711,6 +736,8 @@ def create_admin_router(
                     "display_name": profile.display_name if profile else None,
                     "contact_message": s.contact_message,
                     "draft_text": s.draft_text,
+                    "status": "ready",
+                    "error": None,
                     "created_at": s.created_at.isoformat(),
                 }
             )

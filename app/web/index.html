@@ -894,6 +894,9 @@ function renderContacts() {
     const [micon, mlabel] = REPLY_MODE_BADGE[u.reply_mode] || ['', ''];
     const chips = [];
     if (micon) chips.push(`<span class="chip">${micon} ${mlabel}</span>`);
+    if (u.llm_status === 'queued') chips.push('<span class="chip">⏳ Ждёт обработки</span>');
+    if (u.llm_status === 'generating') chips.push('<span class="chip">✨ LLM работает</span>');
+    if (u.llm_status === 'failed') chips.push('<span class="chip" style="color:#ef5350">⚠ Ошибка LLM</span>');
     if (u.examples_count) chips.push(`<span class="chip">🎯 ${u.examples_count}</span>`);
     return `<div class="contact-item" onclick="openContact(${u.user_id})">
       <div class="avatar">${initials}</div>
@@ -1499,7 +1502,8 @@ async function loadSuggestions() {
       <div class="contact-meta">Создано: ${analytics.created} · Без правок: ${analytics.accepted_as_is} · С правками: ${analytics.accepted_edited} · Отклонено: ${analytics.dismissed}</div>
       <div class="contact-meta">Ответил сам: ${analytics.owner_replied} · Медиана решения: ${analytics.median_decision_seconds == null ? '—' : analytics.median_decision_seconds + ' с'}</div>
       ${(analytics.providers || []).map(p => `<div class="contact-meta">${escHtml(p.provider)} / ${escHtml(p.model)}: ${p.latency_ms} мс, ошибок: ${p.errors}</div>`).join('')}`;
-    updateSuggestBadge(items.length);
+    const readyCount = items.filter(s => s.status === 'ready' || !s.status).length;
+    updateSuggestBadge(readyCount);
     if (!items.length) {
       el.innerHTML = '<div class="empty">Нет новых подсказок — всё разобрано 🎉</div>';
       return;
@@ -1507,6 +1511,18 @@ async function loadSuggestions() {
     el.innerHTML = items.map(s => {
       const who = escHtml(s.display_name || 'ID ' + s.user_id);
       const when = new Date(s.created_at).toLocaleString('ru', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+      if (s.status !== 'ready') {
+        const statusText = s.status === 'queued'
+          ? '⏳ Сообщение принято, жду окончания паузы перед обработкой…'
+          : s.status === 'generating'
+            ? '✨ LLM сейчас готовит ответ…'
+            : `⚠ ${escHtml(s.error || 'Не удалось обработать сообщение')}`;
+        return `<div class="card" id="sugg-status-${s.user_id}">
+          <div class="contact-meta" style="display:flex;justify-content:space-between"><b>${who}</b><span>${when}</span></div>
+          <div class="msg-bubble msg-assistant" style="margin:8px 0">${escHtml(s.contact_message)}</div>
+          <div class="contact-meta">${statusText}</div>
+        </div>`;
+      }
       return `<div class="card" id="sugg-${s.id}">
         <div class="contact-meta" style="display:flex;justify-content:space-between">
           <b>${who}</b><span>${when}</span>
@@ -1915,7 +1931,16 @@ if (!initData && !isLocalDev) {
   }
   loadContacts();
   // Prime the suggestions badge without switching tabs.
-  get('/admin/suggestions').then(items => updateSuggestBadge(items.length)).catch(() => {});
+  get('/admin/suggestions').then(items => updateSuggestBadge(items.filter(s => s.status === 'ready' || !s.status).length)).catch(() => {});
+  setInterval(async () => {
+    try {
+      contactsCache = await get('/admin/users');
+      renderContacts();
+      const items = await get('/admin/suggestions');
+      updateSuggestBadge(items.filter(s => s.status === 'ready' || !s.status).length);
+      if (document.getElementById('page-suggestions')?.classList.contains('active')) loadSuggestions();
+    } catch (_) { /* transient polling errors are harmless */ }
+  }, 3000);
 }
 </script>
 </body>

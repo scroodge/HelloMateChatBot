@@ -29,6 +29,13 @@ jobs:
       - name: Run Black
         run: black --check .
 
+      - name: Run synthetic Eval Lab regression gate
+        run: |
+          python scripts/run_eval.py \
+            --dataset evals/datasets/regression.jsonl \
+            --provider fixture \
+            --output-json /tmp/hellomate-eval.json \
+            --output-report /tmp/hellomate-eval.md
+
       - name: Run tests
         run: pytest
-

@@ -1,6 +1,6 @@
 # HelloMate — план развития Phase 18–24
 
-_Статус: Phase 18 реализован и deployed; Phase 19–24 proposal · Последнее обновление: 2026-07-21_
+_Статус: Phase 18 реализован и deployed; Phase 19 Eval Lab реализован и verified locally; Phase 20–24 proposal · Последнее обновление: 2026-07-21_
 
 ## 1. Цель
 
@@ -298,6 +298,25 @@ live Ollama comparisons запускаются отдельно и сохран�
 - eval отчёт показывает scores, latency и usage по каждому case;
 - CI ловит намеренно внесённую prompt regression;
 - model decision всё ещё не принимается.
+
+### Фактический результат (2026-07-21)
+
+- Добавлен provider-neutral Eval Lab в `app/evals/` и CLI
+  `scripts/run_eval.py`.
+- В Git есть 50 synthetic regression cases и отдельный synthetic development
+  dataset; owner-approved/holdout данные размещаются только в ignored
+  `evals/owner_approved/`.
+- Детерминированные graders проверяют язык, длину, AI/meta leakage,
+  обязательное уточнение, reserved privacy, unsupported commitments и явные
+  ожидаемые/запрещённые свойства. Hard fail не участвует в усреднении.
+- Optional provider judge возвращает score + reason для accuracy/helpfulness,
+  groundedness, style/persona, privacy и сравнения с reference reply.
+- Runner формирует JSON и Markdown отчёты с per-case reply, scores, latency и
+  usage; поддерживает provider/prompt comparison. CI запускает secret-free
+  synthetic fixture baseline и падает при safety/regression failure.
+- Live baseline текущего provider/model запускается локально через тот же CLI
+  и сохраняется в ignored `evals/reports/`; модель и production routing не
+  менялись.
 
 ---
 

@@ -68,6 +68,7 @@ from app.services.memory_service import MemoryService
 from app.services.mood_service import MoodService
 from app.services.persona_service import PersonaService
 from app.services.profile_service import ProfileService
+from app.services.processing_status_service import ProcessingStatusService
 from app.services.rag_service import RAGService
 from app.services.recall_service import RecallService
 from app.services.reply_debounce_service import ReplyDebounceService
@@ -94,7 +95,7 @@ def configure_logging(log_level: str) -> None:
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
-def build_application(config: Config, database: Database):
+def build_application(config: Config, database: Database, processing_status_service=None):
     """Build and configure the Telegram application."""
 
     event_service = EventService(database.events)
@@ -152,6 +153,7 @@ def build_application(config: Config, database: Database):
     )
     examples_service = ContactExamplesService(database.examples)
     suggestions_service = SuggestionsService(database.suggestions, database.feedback)
+    processing_status_service = processing_status_service or ProcessingStatusService()
     assistant_service = AssistantService(
         repository=database.assistant_profiles,
         memory_service=memory_service,
@@ -207,6 +209,7 @@ def build_application(config: Config, database: Database):
     application.bot_data["recall_service"] = recall_service
     application.bot_data["examples_service"] = examples_service
     application.bot_data["suggestions_service"] = suggestions_service
+    application.bot_data["processing_status_service"] = processing_status_service
     application.bot_data["assistant_service"] = assistant_service
     application.bot_data["reply_service"] = reply_service
     application.bot_data["persona_service"] = persona_service
@@ -282,8 +285,8 @@ def build_application(config: Config, database: Database):
     return application
 
 
-def _start_api_server(config: Config, database: Database) -> threading.Thread:
-    api_app = create_api_app(config, database)
+def _start_api_server(config: Config, database: Database, processing_status_service=None) -> threading.Thread:
+    api_app = create_api_app(config, database, processing_status_service)
     thread = threading.Thread(
         target=uvicorn.run,
         kwargs={
@@ -310,8 +313,9 @@ def main() -> None:
     logger.info("Starting HelloMate bot")
 
     with Database(config.database_url) as database:
+        processing_status_service = ProcessingStatusService()
         if config.mini_app_url or config.mini_app_dev:
-            _start_api_server(config, database)
+            _start_api_server(config, database, processing_status_service)
             logger.info("API server started on %s:%s", config.api_host, config.api_port)
             if config.mini_app_dev:
                 logger.warning(
@@ -319,7 +323,7 @@ def main() -> None:
                     config.api_port,
                 )
 
-        application = build_application(config, database)
+        application = build_application(config, database, processing_status_service)
         allowed_updates = ["message", "callback_query"]
         if config.business_mode_enabled:
             allowed_updates.extend(

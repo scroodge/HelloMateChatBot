@@ -21,6 +21,7 @@ from app.services.memory_service import MemoryService
 from app.services.mood_service import MoodService
 from app.services.persona_service import PersonaService
 from app.services.profile_service import ProfileService
+from app.services.processing_status_service import ProcessingStatusService
 from app.services.reply_service import ReplyService
 from app.services.settings_service import SettingsService
 from app.services.suggestions_service import SuggestionsService
@@ -30,7 +31,7 @@ from app.services.weather_service import WeatherService
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 
 
-def create_api_app(config: Config, database: Database) -> FastAPI:
+def create_api_app(config: Config, database: Database, processing_status_service=None) -> FastAPI:
     """Create the FastAPI app bound to the shared database."""
 
     profile_service = ProfileService(database.profiles, config.timezone_name)
@@ -90,6 +91,7 @@ def create_api_app(config: Config, database: Database) -> FastAPI:
     )
     examples_service = ContactExamplesService(database.examples)
     suggestions_service = SuggestionsService(database.suggestions, database.feedback)
+    processing_status_service = processing_status_service or ProcessingStatusService()
     reply_service = ReplyService(
         llm_service=llm_service,
         memory_service=memory_service,
@@ -136,6 +138,7 @@ def create_api_app(config: Config, database: Database) -> FastAPI:
             suggestions_service=suggestions_service,
             summary_service=summary_service,
             feedback_repository=database.feedback,
+            processing_status_service=processing_status_service,
             mini_app_dev=config.mini_app_dev,
             dev_user_id=dev_user_id,
         ),
