@@ -8,6 +8,10 @@ from typing import Protocol
 from uuid import uuid4
 
 from app.models.generation import GenerationRequest, GenerationResult
+from app.services.prompt_registry import (
+    BASELINE_CONTEXT_POLICY_VERSION,
+    BASELINE_PROMPT_VERSION,
+)
 
 
 class LLMProvider(Protocol):
@@ -109,8 +113,8 @@ class LLMService:
         *,
         purpose: str = "reply",
         contact_user_id: int | None = None,
-        prompt_version: str = "v1",
-        context_policy_version: str = "v1",
+        prompt_version: str = BASELINE_PROMPT_VERSION,
+        context_policy_version: str = BASELINE_CONTEXT_POLICY_VERSION,
     ) -> str:
         """Compatibility helper for text-only callers."""
 
@@ -128,11 +132,17 @@ async def complete_text(
     *,
     purpose: str,
     contact_user_id: int | None,
+    prompt_version: str = BASELINE_PROMPT_VERSION,
+    context_policy_version: str = BASELINE_CONTEXT_POLICY_VERSION,
 ) -> str:
     """Call the modern metadata API while tolerating legacy injected doubles."""
     try:
         return await llm_service.complete(
-            messages, purpose=purpose, contact_user_id=contact_user_id
+            messages,
+            purpose=purpose,
+            contact_user_id=contact_user_id,
+            prompt_version=prompt_version,
+            context_policy_version=context_policy_version,
         )
     except TypeError as exc:
         if "unexpected keyword argument" not in str(exc):

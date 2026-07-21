@@ -13,6 +13,7 @@ from app.services.llm import LLMService, complete_text
 from app.services.memory_service import MemoryService
 from app.services.mood_service import MoodService
 from app.services.profile_service import ProfileService
+from app.services.prompt_registry import CONTEXT_POLICY_VERSION, REPLY_PROMPT_VERSION
 from app.services.rag_service import RAGService
 from app.services.settings_service import SettingsService
 from app.services.weather_service import WeatherService, is_weather_query
@@ -110,8 +111,7 @@ def _openness_directive(openness: str, language: str) -> str:
                 "человеком; можно делиться личным и эмоциями."
             ),
             "neutral": (
-                " Стиль общения: дружелюбно, но умеренно; не раскрывай лишних "
-                "личных подробностей."
+                " Стиль общения: дружелюбно, но умеренно; не раскрывай лишних личных подробностей."
             ),
             "reserved": (
                 " Стиль общения: вежливо, но сдержанно и закрыто. Не делись личными "
@@ -125,8 +125,7 @@ def _openness_directive(openness: str, language: str) -> str:
                 "person; sharing personal things and emotions is fine."
             ),
             "neutral": (
-                " Communication style: friendly but measured; do not reveal extra "
-                "personal details."
+                " Communication style: friendly but measured; do not reveal extra personal details."
             ),
             "reserved": (
                 " Communication style: polite but reserved and guarded. Do not share "
@@ -219,7 +218,12 @@ class ReplyService:
                 user_id, user_message, language, reply_context=reply_context
             )
             reply = await complete_text(
-                self.llm_service, messages, purpose="reply", contact_user_id=user_id
+                self.llm_service,
+                messages,
+                purpose="reply",
+                contact_user_id=user_id,
+                prompt_version=REPLY_PROMPT_VERSION,
+                context_policy_version=CONTEXT_POLICY_VERSION,
             )
             if _contains_cjk(reply):
                 reply = await self._rewrite_without_cjk(messages, reply, language)
@@ -249,7 +253,12 @@ class ReplyService:
                 user_id, user_message, language, reply_context=reply_context
             )
             reply = await complete_text(
-                self.llm_service, messages, purpose="draft", contact_user_id=user_id
+                self.llm_service,
+                messages,
+                purpose="draft",
+                contact_user_id=user_id,
+                prompt_version=REPLY_PROMPT_VERSION,
+                context_policy_version=CONTEXT_POLICY_VERSION,
             )
             if _contains_cjk(reply):
                 reply = await self._rewrite_without_cjk(messages, reply, language)
@@ -281,7 +290,12 @@ class ReplyService:
         try:
             reply = _sanitize_reply(
                 await complete_text(
-                    self.llm_service, messages, purpose="preview", contact_user_id=user_id
+                    self.llm_service,
+                    messages,
+                    purpose="preview",
+                    contact_user_id=user_id,
+                    prompt_version=REPLY_PROMPT_VERSION,
+                    context_policy_version=CONTEXT_POLICY_VERSION,
                 )
             )
         except Exception:
@@ -312,6 +326,8 @@ class ReplyService:
             ],
             "context_estimated_tokens": compiled_context.estimated_tokens,
             "context_considered_tokens": compiled_context.considered_tokens,
+            "prompt_version": REPLY_PROMPT_VERSION,
+            "context_policy_version": CONTEXT_POLICY_VERSION,
             "latency_ms": latency_ms,
         }
 
@@ -435,19 +451,23 @@ class ReplyService:
                     )
                 )
         if self.facts_service is not None:
-            facts = self.facts_service.facts_for_prompt(user_id, language)
-            if facts:
-                facts_str = "; ".join(f"{k}={v}" for k, v in facts.items())
+            facts = self.facts_service.get_facts(user_id)
+            labels = self.facts_service._label_map(language)
+            for fact in facts:
+                label = labels.get(fact.key, fact.key)
                 blocks.append(
                     context_block(
-                        "facts",
+                        "fact",
                         (
-                            f" Известные факты о контакте: {facts_str}."
+                            f" Известный факт о контакте: {label}={fact.value}."
                             if language == "ru"
-                            else f" Known facts about this contact: {facts_str}."
+                            else f" Known fact about this contact: {label}={fact.value}."
                         ),
                         priority=600,
-                        source_id=f"contact_facts:{user_id}",
+                        source_id=fact.version_id or f"contact_fact:{user_id}:{fact.key}",
+                        confidence=fact.confidence,
+                        freshness_at=fact.last_observed_at,
+                        conflict_key=f"contact_fact:{fact.key}",
                     )
                 )
         if rag_context:
@@ -594,7 +614,12 @@ class ReplyService:
         ]
         try:
             rewritten = await complete_text(
-                self.llm_service, retry_messages, purpose="reply", contact_user_id=None
+                self.llm_service,
+                retry_messages,
+                purpose="reply",
+                contact_user_id=None,
+                prompt_version=REPLY_PROMPT_VERSION,
+                context_policy_version=CONTEXT_POLICY_VERSION,
             )
             if not _contains_cjk(rewritten):
                 return rewritten

@@ -1,6 +1,6 @@
 # HelloMate — план развития Phase 18–24
 
-_Статус: Phase 18 реализован и deployed; Phase 19 Eval Lab реализован и verified locally; Phase 20–24 proposal · Последнее обновление: 2026-07-21_
+_Статус: Phase 18 реализован и deployed; Phase 19 Eval Lab реализован и verified locally; Phase 20 реализован locally (production migration и metrics pending); Phase 21–24 proposal · Последнее обновление: 2026-07-21_
 
 ## 1. Цель
 
@@ -397,6 +397,23 @@ Compiler:
 - prompt помещается в заданный budget;
 - конфликтующие факты имеют предсказуемое поведение;
 - baseline eval не регрессирует, а целевые metrics улучшаются.
+
+### Фактический результат (2026-07-21)
+
+- `ReplyService` получает typed compiled context; Phase 20B добавил budget,
+  deduplication, freshness/confidence penalties, conflict handling и
+  explainable inclusion decisions.
+- Активные facts теперь содержат source message, confidence, first/last
+  observed, validity interval, owner confirmation и stable version ID. При
+  изменении старый факт переносится в append-only history с указанием новой
+  superseding version; provenance доступен через Admin API.
+- Prompt registry фиксирует `reply-v1` и `context-compiler-v2` с changelog.
+  Эти IDs передаются в generation traces для reply, draft, preview и rewrite,
+  поэтому context/prompt changes больше не происходят silently.
+- Playground уже возвращает source, priority, inclusion reason и token budget
+  для каждого context block.
+- Verification: targeted Ruff passed, 264 pytest tests passed, offline Eval Lab
+  regression gate passed. Production deploy и migration ещё не выполнялись.
 
 ---
 

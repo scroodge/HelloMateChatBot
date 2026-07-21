@@ -179,7 +179,35 @@ contact_facts = Table(
     Column("key", Text, nullable=False),
     Column("value", Text, nullable=False),
     Column("updated_at", Text, nullable=False),
+    Column("source_message_id", Integer),
+    Column("confidence", Float),
+    Column("first_observed_at", Text),
+    Column("last_observed_at", Text),
+    Column("valid_from", Text),
+    Column("valid_until", Text),
+    Column("owner_confirmed", Boolean, nullable=False, default=False),
+    Column("version_id", Text),
     Index("pk_contact_facts", "user_id", "key", unique=True),
+)
+
+contact_fact_history = Table(
+    "contact_fact_history",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("user_id", Integer, nullable=False),
+    Column("key", Text, nullable=False),
+    Column("value", Text, nullable=False),
+    Column("source_message_id", Integer),
+    Column("confidence", Float),
+    Column("first_observed_at", Text),
+    Column("last_observed_at", Text),
+    Column("valid_from", Text),
+    Column("valid_until", Text),
+    Column("owner_confirmed", Boolean, nullable=False, default=False),
+    Column("version_id", Text),
+    Column("superseded_by", Text),
+    Column("created_at", Text, nullable=False),
+    Index("idx_contact_fact_history_user_key", "user_id", "key", "created_at"),
 )
 
 contact_facts_meta = Table(

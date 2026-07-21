@@ -258,6 +258,39 @@ def test_manual_set_and_delete(tmp_path) -> None:
         assert svc.facts_as_dict(1) == {}
 
 
+def test_replacing_fact_preserves_temporal_provenance(tmp_path) -> None:
+    svc, _memory, _llm, db = _make(tmp_path)
+    with db:
+        svc.set_fact(1, "city", "Минск")
+        first = svc.get_facts(1)[0]
+
+        svc.set_fact(1, "city", "Гродно")
+        current = svc.get_facts(1)[0]
+        history = svc.fact_history(1, "city")
+
+    assert current.value == "Гродно"
+    assert current.owner_confirmed is True
+    assert current.confidence == 1.0
+    assert current.version_id and current.version_id != first.version_id
+    assert len(history) == 1
+    assert history[0]["value"] == "Минск"
+    assert history[0]["valid_until"] is not None
+    assert history[0]["superseded_by"] == current.version_id
+
+
+@pytest.mark.asyncio
+async def test_extracted_fact_records_latest_contact_message_as_source(tmp_path) -> None:
+    svc, memory, _llm, db = _make(tmp_path, interval=1, llm_return={"city": "Минск"})
+    with db:
+        source = memory.record_user_message(1, "Я живу в Минске")
+        await svc.maybe_extract(1)
+        fact = svc.get_facts(1)[0]
+
+    assert fact.source_message_id == source.id
+    assert fact.confidence == 0.6
+    assert fact.owner_confirmed is False
+
+
 # ---------------------------------------------------------------------------
 # Multi-valued facts
 # ---------------------------------------------------------------------------

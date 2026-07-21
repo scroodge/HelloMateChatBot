@@ -541,6 +541,15 @@ def create_admin_router(
             return {}
         return facts_service.facts_structured(user_id)
 
+    @router.get("/users/{user_id}/facts/{key}/history")
+    async def get_fact_history(
+        user_id: int, key: str, caller_id: int = AdminUser
+    ) -> list[dict[str, object]]:
+        """Return replaced versions of one fact for provenance review."""
+        if facts_service is None:
+            raise HTTPException(status_code=503, detail="Facts service not enabled")
+        return facts_service.fact_history(user_id, key)
+
     @router.put("/users/{user_id}/facts/{key}")
     async def set_fact(
         user_id: int, key: str, request: ContactFactWriteRequest, caller_id: int = AdminUser

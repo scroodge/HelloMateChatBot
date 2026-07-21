@@ -333,7 +333,7 @@ class ContactFactsService:
         return out
 
     def facts_structured(self, user_id: int) -> dict[str, dict[str, object]]:
-        """Facts as key -> {multi, values, label}. Used by the API/UI to render chips."""
+        """Facts as key -> values plus active provenance for the API/UI."""
         multi = self._multi_keys()
         try:
             language = self.settings_service.get_language(user_id)
@@ -343,11 +343,56 @@ class ContactFactsService:
         out: dict[str, dict[str, object]] = {}
         for f in self.get_facts(user_id):
             label = labels.get(f.key, f.key)
+            provenance = {
+                "source_message_id": f.source_message_id,
+                "confidence": f.confidence,
+                "first_observed_at": f.first_observed_at.isoformat()
+                if f.first_observed_at
+                else None,
+                "last_observed_at": f.last_observed_at.isoformat() if f.last_observed_at else None,
+                "valid_from": f.valid_from.isoformat() if f.valid_from else None,
+                "valid_until": f.valid_until.isoformat() if f.valid_until else None,
+                "owner_confirmed": f.owner_confirmed,
+                "version_id": f.version_id,
+            }
             if f.key in multi:
-                out[f.key] = {"multi": True, "values": _decode_values(f.value), "label": label}
+                out[f.key] = {
+                    "multi": True,
+                    "values": _decode_values(f.value),
+                    "label": label,
+                    "provenance": provenance,
+                }
             else:
-                out[f.key] = {"multi": False, "values": [f.value], "label": label}
+                out[f.key] = {
+                    "multi": False,
+                    "values": [f.value],
+                    "label": label,
+                    "provenance": provenance,
+                }
         return out
+
+    def fact_history(self, user_id: int, key: str) -> list[dict[str, object]]:
+        """Return inactive versions so the owner can review a changed fact's origin."""
+        return [
+            {
+                "id": fact.id,
+                "value": fact.value,
+                "source_message_id": fact.source_message_id,
+                "confidence": fact.confidence,
+                "first_observed_at": fact.first_observed_at.isoformat()
+                if fact.first_observed_at
+                else None,
+                "last_observed_at": fact.last_observed_at.isoformat()
+                if fact.last_observed_at
+                else None,
+                "valid_from": fact.valid_from.isoformat() if fact.valid_from else None,
+                "valid_until": fact.valid_until.isoformat() if fact.valid_until else None,
+                "owner_confirmed": fact.owner_confirmed,
+                "version_id": fact.version_id,
+                "superseded_by": fact.superseded_by,
+            }
+            for fact in self.repository.get_history(user_id, key)
+        ]
 
     def facts_for_prompt(self, user_id: int, language: str) -> dict[str, str]:
         """Facts as human-label -> value string, for injection into the reply prompt.
@@ -358,7 +403,16 @@ class ContactFactsService:
         labels = self._label_map(language)
         return {labels.get(k, k): v for k, v in self.facts_as_dict(user_id).items()}
 
-    def set_fact(self, user_id: int, key: str, value: str) -> None:
+    def set_fact(
+        self,
+        user_id: int,
+        key: str,
+        value: str,
+        *,
+        source_message_id: int | None = None,
+        confidence: float = 1.0,
+        owner_confirmed: bool = True,
+    ) -> None:
         """Set (single) or append (multi) a fact value.
 
         For multi keys, value may itself be comma-separated; all items are merged
@@ -377,11 +431,25 @@ class ContactFactsService:
                 incoming = [value]
             merged = _dedup(existing + incoming)[:MAX_FACT_VALUES]
             if merged:
-                self.repository.set_fact(user_id, key, _encode_values(merged))
+                self.repository.set_fact(
+                    user_id,
+                    key,
+                    _encode_values(merged),
+                    source_message_id=source_message_id,
+                    confidence=confidence,
+                    owner_confirmed=owner_confirmed,
+                )
             else:
                 self.repository.delete_fact(user_id, key)
         else:
-            self.repository.set_fact(user_id, key, value)
+            self.repository.set_fact(
+                user_id,
+                key,
+                value,
+                source_message_id=source_message_id,
+                confidence=confidence,
+                owner_confirmed=owner_confirmed,
+            )
 
     def remove_fact_value(self, user_id: int, key: str, value: str) -> None:
         """Remove a single value from a multi-valued fact (no-op for single keys).
@@ -396,7 +464,13 @@ class ContactFactsService:
             v for v in self._current_values(user_id, key) if v.casefold() != value.casefold()
         ]
         if remaining:
-            self.repository.set_fact(user_id, key, _encode_values(remaining))
+            self.repository.set_fact(
+                user_id,
+                key,
+                _encode_values(remaining),
+                confidence=1.0,
+                owner_confirmed=True,
+            )
         else:
             self.repository.delete_fact(user_id, key)
 
@@ -473,9 +547,18 @@ class ContactFactsService:
         ).strip()
         new_facts = _parse_facts_json(raw, allowed_keys)
 
-        # Merge: set_fact overwrites single keys and appends+dedups multi keys.
+        source_message_id = self._latest_contact_message_id(recent)
+        # Merge: owner-approved API writes retain confidence 1.0; extracted facts
+        # are attributable to the latest contact message in this extraction window.
         for key, value in new_facts.items():
-            self.set_fact(user_id, key, value)
+            self.set_fact(
+                user_id,
+                key,
+                value,
+                source_message_id=source_message_id,
+                confidence=0.6,
+                owner_confirmed=False,
+            )
 
         self.repository.set_meta(user_id, total)
         logger.info(
@@ -528,8 +611,16 @@ class ContactFactsService:
                         self.llm_service, prompt, purpose="facts", contact_user_id=user_id
                     )
                 ).strip()
+                source_message_id = self._latest_contact_message_id(messages)
                 for key, value in _parse_facts_json(raw, allowed_keys).items():
-                    self.set_fact(user_id, key, value)
+                    self.set_fact(
+                        user_id,
+                        key,
+                        value,
+                        source_message_id=source_message_id,
+                        confidence=0.6,
+                        owner_confirmed=False,
+                    )
                 offset += len(messages)
 
             self.repository.set_meta(user_id, total)
@@ -543,3 +634,11 @@ class ContactFactsService:
             return facts
         finally:
             self._in_progress.discard(user_id)
+
+    @staticmethod
+    def _latest_contact_message_id(messages: list[object]) -> int | None:
+        for message in reversed(messages):
+            if getattr(message, "role", None) == "user":
+                message_id = getattr(message, "id", None)
+                return int(message_id) if message_id is not None else None
+        return None
