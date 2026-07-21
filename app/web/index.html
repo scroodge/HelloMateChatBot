@@ -199,6 +199,43 @@
     }
     .subnav-btn.active { background: var(--btn); color: var(--btn-text); border-color: var(--btn); }
 
+    /* ── AI activity ── */
+    .activity-lede { font-size: 13px; color: var(--hint); }
+    .activity-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 9px;
+      padding: 10px 0;
+      border-top: 1px solid var(--border);
+    }
+    .activity-row:first-child { border-top: none; padding-top: 0; }
+    .activity-mark {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--hint);
+      margin-top: 5px;
+      flex-shrink: 0;
+    }
+    .activity-mark.live { background: #f0a500; }
+    .activity-mark.ok { background: #2e7d32; }
+    .activity-mark.problem { background: #c62828; }
+    .activity-copy { flex: 1; min-width: 0; }
+    .activity-title { font-weight: 650; font-size: 13px; }
+    .activity-meta { font-size: 11px; color: var(--hint); margin-top: 2px; }
+    .activity-contact {
+      border: none;
+      background: none;
+      color: var(--link);
+      cursor: pointer;
+      font: inherit;
+      font-weight: 650;
+      padding: 0;
+    }
+    .fact-provenance { margin: 4px 0 8px 90px; font-size: 11px; color: var(--hint); }
+    .fact-provenance summary { cursor: pointer; color: var(--link); }
+    .fact-provenance-body { margin-top: 5px; line-height: 1.45; }
+
     /* ── forms ── */
     label { display: block; font-size: 12px; color: var(--hint); margin-bottom: 4px; margin-top: 10px; }
     label:first-child { margin-top: 0; }
@@ -394,6 +431,9 @@
   <button data-page="suggestions" onclick="showPage('suggestions')">
     <span class="icon">💡</span>Подсказки<span id="nav-suggest-badge" class="nav-badge" hidden></span>
   </button>
+  <button data-page="activity" onclick="showPage('activity')">
+    <span class="icon">◉</span>Активность
+  </button>
   <button data-page="playground" onclick="showPage('playground')">
     <span class="icon">🧪</span>Плейграунд
   </button>
@@ -428,6 +468,22 @@
     </div>
     <div id="suggestions-analytics" class="card" style="display:none"></div>
     <div id="suggestions-list"><div class="spinner">Загрузка...</div></div>
+  </div>
+
+  <!-- ── ACTIVITY ── -->
+  <div class="page" id="page-activity">
+    <div class="card">
+      <div class="card-title">Что происходит сейчас</div>
+      <div class="activity-lede">Только служебный статус. Тексты переписки и промпты здесь не показываются.</div>
+      <div id="activity-live" style="margin-top:10px"><div class="spinner">Загрузка...</div></div>
+    </div>
+    <div class="card">
+      <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
+        <span>Последние генерации</span>
+        <button class="btn btn-sm btn-secondary" onclick="loadActivity()" style="width:auto">Обновить</button>
+      </div>
+      <div id="activity-recent"><div class="spinner">Загрузка...</div></div>
+    </div>
   </div>
 
   <!-- ── CONTACT DETAIL ── -->
@@ -833,6 +889,7 @@ function showPage(name) {
 
   if (name === 'contacts')    loadContacts();
   if (name === 'suggestions') loadSuggestions();
+  if (name === 'activity')    loadActivity();
   if (name === 'stats')       loadStats();
   if (name === 'settings')    loadGlobalSettings();
   if (name === 'playground')  loadPlaygroundContacts();
@@ -1324,11 +1381,60 @@ function renderFacts(facts) {
         <span class="tag-del fact-del" data-key="${escHtml(k)}" data-multi="0">×</span>
       </span>`;
     }
+    const provenance = f && f.provenance;
+    const provenanceToggle = provenance
+      ? `<details class="fact-provenance" data-key="${escHtml(k)}" ontoggle="loadFactHistory(this)">
+          <summary>Источник и изменения</summary>
+          <div class="fact-provenance-body">Проверяем…</div>
+        </details>`
+      : '';
     return `<div class="tag-row" style="margin-bottom:6px;align-items:flex-start">
       <span style="font-size:11px;color:var(--hint);width:90px;flex-shrink:0;padding-top:4px">${label}</span>
       ${body}
-    </div>`;
+    </div>${provenanceToggle}`;
   }).join('');
+}
+
+function formatActivityTime(value) {
+  if (!value) return 'только что';
+  return new Date(value).toLocaleString('ru', {
+    day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
+  });
+}
+
+function formatFactProvenance(provenance, history) {
+  const confidence = provenance.confidence == null
+    ? 'не указана'
+    : `${Math.round(provenance.confidence * 100)}%`;
+  const source = provenance.source_message_id == null
+    ? 'ручное изменение или старый факт'
+    : `сообщение #${provenance.source_message_id}`;
+  const observed = provenance.last_observed_at
+    ? formatActivityTime(provenance.last_observed_at)
+    : 'дата не сохранена';
+  const state = provenance.owner_confirmed ? 'подтверждено владельцем' : 'извлечено автоматически';
+  const previous = history.length
+    ? `<br>Предыдущих значений: ${history.length}. Последнее заменено ${formatActivityTime(history[0].valid_until)}.`
+    : '<br>Предыдущих значений нет.';
+  return `Источник: ${escHtml(source)} · уверенность ${escHtml(confidence)} · ${escHtml(state)}.<br>Последнее наблюдение: ${escHtml(observed)}.${previous}`;
+}
+
+async function loadFactHistory(details) {
+  if (!details.open || details.dataset.loaded === '1' || !currentUserId) return;
+  const target = details.querySelector('.fact-provenance-body');
+  const key = details.dataset.key;
+  try {
+    const [history, facts] = await Promise.all([
+      get(`/admin/users/${currentUserId}/facts/${encodeURIComponent(key)}/history`),
+      get(`/admin/users/${currentUserId}/facts`),
+    ]);
+    const fact = facts[key];
+    if (!fact?.provenance) throw new Error('Источник пока недоступен');
+    target.innerHTML = formatFactProvenance(fact.provenance, history || []);
+    details.dataset.loaded = '1';
+  } catch (e) {
+    target.textContent = `Не удалось загрузить источник: ${e.message}`;
+  }
 }
 
 async function saveFact() {
@@ -1645,6 +1751,91 @@ function removeSuggestionCard(id, pending) {
   const list = document.getElementById('suggestions-list');
   if (!list.querySelector('.card')) {
     list.innerHTML = '<div class="empty">Нет новых подсказок — всё разобрано 🎉</div>';
+  }
+}
+
+// ── AI activity ─────────────────────────────────────────────────────────────
+
+const ACTIVITY_PURPOSE = {
+  draft: 'Черновик подготовлен',
+  reply: 'Ответ сгенерирован',
+  preview: 'Плейграунд проверен',
+  summary: 'Резюме обновлено',
+  facts: 'Факты обработаны',
+  style: 'Стиль обновлён',
+  assistant: 'Ассистент ответил',
+};
+
+function openActivityContact(userId) {
+  if (userId == null) return;
+  openContact(userId);
+}
+
+function activityContact(run) {
+  if (run.user_id == null) return 'Системная задача';
+  const name = escHtml(run.display_name || `ID ${run.user_id}`);
+  return `<button class="activity-contact" onclick="openActivityContact(${run.user_id})">${name}</button>`;
+}
+
+function renderActivityLive(items) {
+  const el = document.getElementById('activity-live');
+  if (!items.length) {
+    el.innerHTML = '<div class="activity-meta">Очередь пуста. Сейчас бот ничего не генерирует.</div>';
+    return;
+  }
+  el.innerHTML = items.map(item => {
+    const title = item.status === 'queued' ? 'Ожидает паузу перед ответом'
+      : item.status === 'generating' ? 'LLM готовит ответ'
+      : 'Не удалось обработать сообщение';
+    const marker = item.status === 'failed' ? 'problem' : 'live';
+    const contact = activityContact(item);
+    const detail = item.error ? ` · ${escHtml(item.error)}` : '';
+    return `<div class="activity-row">
+      <span class="activity-mark ${marker}"></span>
+      <div class="activity-copy"><div class="activity-title">${contact}: ${title}</div>
+      <div class="activity-meta">${formatActivityTime(item.updated_at)}${detail}</div></div>
+    </div>`;
+  }).join('');
+}
+
+function renderActivityRecent(items) {
+  const el = document.getElementById('activity-recent');
+  if (!items.length) {
+    el.innerHTML = '<div class="activity-meta">Пока нет завершённых генераций.</div>';
+    return;
+  }
+  el.innerHTML = items.map(run => {
+    const failed = Boolean(run.error_code);
+    const title = failed ? 'Генерация завершилась ошибкой' : (ACTIVITY_PURPOSE[run.purpose] || run.purpose);
+    const outcome = failed
+      ? escHtml(run.error_code)
+      : run.suggestion_status === 'pending'
+        ? 'черновик ждёт решения в Подсказках'
+        : run.suggestion_status === 'accepted'
+          ? 'черновик принят'
+          : `${run.provider} / ${run.model} · ${run.latency_ms} мс`;
+    const version = run.prompt_version && run.context_policy_version
+      ? ` · ${escHtml(run.prompt_version)} / ${escHtml(run.context_policy_version)}`
+      : '';
+    return `<div class="activity-row">
+      <span class="activity-mark ${failed ? 'problem' : 'ok'}"></span>
+      <div class="activity-copy"><div class="activity-title">${activityContact(run)}: ${title}</div>
+      <div class="activity-meta">${formatActivityTime(run.created_at)} · ${outcome}${version}</div></div>
+    </div>`;
+  }).join('');
+}
+
+async function loadActivity() {
+  const liveEl = document.getElementById('activity-live');
+  const recentEl = document.getElementById('activity-recent');
+  if (!liveEl || !recentEl) return;
+  try {
+    const activity = await get('/admin/activity');
+    renderActivityLive(activity.live || []);
+    renderActivityRecent(activity.recent || []);
+  } catch (e) {
+    liveEl.innerHTML = `<div class="error">Не удалось загрузить статус: ${escHtml(e.message)}</div>`;
+    recentEl.innerHTML = '';
   }
 }
 
@@ -1997,6 +2188,7 @@ if (!initData && !isLocalDev) {
       const items = await get('/admin/suggestions');
       updateSuggestBadge(items.filter(s => s.status === 'ready' || !s.status).length);
       if (document.getElementById('page-suggestions')?.classList.contains('active')) loadSuggestions({ silent: true });
+      if (document.getElementById('page-activity')?.classList.contains('active')) loadActivity();
     } catch (_) { /* transient polling errors are harmless */ }
   }, 3000);
 }

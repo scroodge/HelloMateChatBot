@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from datetime import datetime
 from typing import Any
 
 import httpx
@@ -178,6 +179,49 @@ def create_admin_router(
     # -----------------------------------------------------------------------
     # 7A: Contacts roster
     # -----------------------------------------------------------------------
+
+    @router.get("/activity")
+    async def get_activity(caller_id: int = AdminUser) -> dict[str, Any]:
+        """Return an owner-safe operational feed for the Mini App Activity page."""
+        if feedback_repository is None:
+            return {
+                "generated_at": datetime.now().astimezone().isoformat(),
+                "live": [],
+                "recent": [],
+            }
+
+        def contact_name(user_id: int | None) -> str | None:
+            if user_id is None:
+                return None
+            profile = profile_service.get_profile(user_id)
+            return profile.display_name if profile and profile.display_name else f"ID {user_id}"
+
+        live = []
+        if processing_status_service is not None:
+            live = [
+                {
+                    "user_id": status.user_id,
+                    "display_name": contact_name(status.user_id),
+                    "status": status.status,
+                    "updated_at": status.updated_at.isoformat(),
+                    "error": status.error,
+                }
+                for status in processing_status_service.list()
+            ]
+
+        recent = []
+        for run in feedback_repository.recent_generation_runs():
+            recent.append(
+                {
+                    **run,
+                    "display_name": contact_name(run["user_id"]),
+                }
+            )
+        return {
+            "generated_at": datetime.now().astimezone().isoformat(),
+            "live": live,
+            "recent": recent,
+        }
 
     @router.get("/users")
     async def list_users(caller_id: int = AdminUser) -> list[dict[str, Any]]:

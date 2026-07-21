@@ -34,6 +34,40 @@ class FeedbackRepositoryImpl:
                 .values(suggestion_id=suggestion_id)
             )
 
+    def recent_generation_runs(self, *, limit: int = 30) -> list[dict[str, Any]]:
+        """Return owner-safe generation metadata, newest first.
+
+        Prompts and model replies deliberately stay out of this operational feed.
+        The linked Suggest Inbox status tells the owner whether a draft still
+        needs attention without duplicating its content here.
+        """
+        query = (
+            select(
+                generation_runs.c.trace_id,
+                generation_runs.c.user_id,
+                generation_runs.c.purpose,
+                generation_runs.c.provider,
+                generation_runs.c.model,
+                generation_runs.c.prompt_version,
+                generation_runs.c.context_policy_version,
+                generation_runs.c.latency_ms,
+                generation_runs.c.finish_reason,
+                generation_runs.c.error_code,
+                generation_runs.c.created_at,
+                suggestions.c.status.label("suggestion_status"),
+            )
+            .select_from(
+                generation_runs.outerjoin(
+                    suggestions, generation_runs.c.suggestion_id == suggestions.c.id
+                )
+            )
+            .order_by(generation_runs.c.id.desc())
+            .limit(max(1, min(limit, 100)))
+        )
+        with self._db.engine.connect() as conn:
+            rows = conn.execute(query).mappings().all()
+        return [dict(row) for row in rows]
+
     def add_feedback_event(
         self,
         suggestion_id: int,

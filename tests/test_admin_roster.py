@@ -55,6 +55,7 @@ def _make_client(db: Database) -> tuple[TestClient, ProfileService, SettingsServ
             greeting_service=greeting_service,
             greeting_rules_service=greeting_rules_service,
             event_repository=db.events,
+            feedback_repository=db.feedback,
             mini_app_dev=True,  # bypass Telegram auth in tests
             dev_user_id=ADMIN_ID,
         ),
@@ -88,6 +89,42 @@ def test_roster_includes_profile_only_contacts(tmp_path) -> None:
     profile_only = next(r for r in roster if r["user_id"] == 7431073781)
     assert profile_only["display_name"] == "Новый контакт"
     assert profile_only["language"] == "ru"  # defaults used when no settings row
+
+
+def test_activity_feed_exposes_metadata_without_prompt_or_reply(tmp_path) -> None:
+    with Database(f"sqlite:///{tmp_path / 'activity.db'}") as db:
+        client, profile_service, _ = _make_client(db)
+        profile_service.get_or_create_profile(7431073781, display_name="Новый контакт")
+        db.feedback.add_generation_run(
+            {
+                "trace_id": "trace-1",
+                "user_id": 7431073781,
+                "suggestion_id": None,
+                "purpose": "draft",
+                "provider": "ollama",
+                "model": "qwen",
+                "prompt_version": "reply-v1",
+                "context_policy_version": "context-compiler-v2",
+                "response_id": None,
+                "input_tokens": 12,
+                "output_tokens": 8,
+                "cached_tokens": None,
+                "latency_ms": 321,
+                "finish_reason": "stop",
+                "error_code": None,
+                "fallback_chain": None,
+                "created_at": "2026-07-21T13:42:00+00:00",
+            }
+        )
+
+        response = client.get("/api/admin/activity")
+
+    assert response.status_code == 200
+    recent = response.json()["recent"]
+    assert recent[0]["display_name"] == "Новый контакт"
+    assert recent[0]["prompt_version"] == "reply-v1"
+    assert "messages" not in recent[0]
+    assert "draft_text" not in recent[0]
 
 
 def test_persona_too_long_returns_422_not_500(tmp_path) -> None:
