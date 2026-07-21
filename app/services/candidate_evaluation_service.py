@@ -46,7 +46,15 @@ class CandidateEvaluationService:
             raise ValueError("This provider, model and base URL candidate already exists")
         if credential_id not in self.credential_ids():
             raise ValueError("Unknown server-side credential ID")
-        item = {"id": f"candidate-{len(items) + 1}", "name": name.strip()[:80], "provider": provider, "model": model.strip()[:160], "base_url": base_url.strip(), "credential_id": credential_id, "status": "new"}
+        item = {
+            "id": f"candidate-{len(items) + 1}",
+            "name": name.strip()[:80],
+            "provider": provider,
+            "model": model.strip()[:160],
+            "base_url": base_url.strip(),
+            "credential_id": credential_id,
+            "status": "new",
+        }
         items.append(item)
         self.settings.set_bot_setting(_KEY, json.dumps(items, ensure_ascii=False))
         return item
@@ -56,19 +64,38 @@ class CandidateEvaluationService:
         candidate = next((item for item in items if item["id"] == candidate_id), None)
         if candidate is None:
             return None
-        cases = load_cases(Path("evals/datasets/regression.jsonl"))
-        provider = self._provider(candidate)
-        results = await run_cases(cases, provider, prompt_version=str(candidate["id"]))
-        summary = summarize(results)
+        try:
+            cases = load_cases(Path("evals/datasets/regression.jsonl"))
+            provider = self._provider(candidate)
+            results = await run_cases(cases, provider, prompt_version=str(candidate["id"]))
+            summary = summarize(results)
+        except Exception as exc:
+            summary = {
+                "case_count": 0,
+                "passed_count": 0,
+                "pass_rate": 0.0,
+                "hard_failure_count": 1,
+                "error": str(exc)[:500],
+            }
         candidate["summary"] = summary
-        candidate["status"] = "passed" if not summary["hard_failure_count"] and summary["pass_rate"] == 1 else "failed"
+        candidate["status"] = (
+            "passed"
+            if not summary["hard_failure_count"] and summary["pass_rate"] == 1
+            else "failed"
+        )
         self.settings.set_bot_setting(_KEY, json.dumps(items, ensure_ascii=False))
         return candidate
 
     def _provider(self, candidate: dict[str, object]) -> object:
         base_url = str(candidate["base_url"]) or self.config.llm_base_url
         if candidate["provider"] == "openai":
-            return OpenAIProvider(base_url, str(candidate["model"]), self._credential(candidate), max_tokens=512, temperature=0.0)
+            return OpenAIProvider(
+                base_url,
+                str(candidate["model"]),
+                self._credential(candidate),
+                max_tokens=512,
+                temperature=0.0,
+            )
         return OllamaProvider(base_url, str(candidate["model"]), max_tokens=512, temperature=0.0)
 
     def credential_ids(self) -> list[str]:
