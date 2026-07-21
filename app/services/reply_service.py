@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import logging
 import re
+from datetime import datetime
 
 from app.i18n import language_name, translate
+from app.models.context import CompiledContext, ContextBlock
+from app.services.context_compiler import ContextCompiler, context_block
 from app.services.llm import LLMService, complete_text
 from app.services.memory_service import MemoryService
 from app.services.mood_service import MoodService
@@ -23,6 +26,12 @@ def _contains_cjk(text: str) -> bool:
     """Return True when the text includes Chinese/Japanese/Korean characters."""
 
     return bool(_CJK_PATTERN.search(text))
+
+
+def _freshness_at(value: object) -> datetime | None:
+    """Keep provenance metadata strict when tests or legacy data omit a timestamp."""
+
+    return value if isinstance(value, datetime) else None
 
 
 # Meta-instruction leakage: a weak model sometimes appends a self-directed
@@ -177,6 +186,7 @@ class ReplyService:
         facts_service: object | None = None,
         recall_service: object | None = None,
         examples_service: object | None = None,
+        context_compiler: ContextCompiler | None = None,
         enabled: bool = False,
     ) -> None:
         self.llm_service = llm_service
@@ -189,6 +199,7 @@ class ReplyService:
         self.facts_service = facts_service
         self.recall_service = recall_service
         self.examples_service = examples_service
+        self.context_compiler = context_compiler or ContextCompiler()
         self.enabled = enabled
 
     async def generate_reply(
@@ -259,7 +270,8 @@ class ReplyService:
         import time
 
         language = self.settings_service.get_language(user_id)
-        messages = await self._build_messages(user_id, user_message, language)
+        compiled_context = await self._compile_context(user_id, user_message, language)
+        messages = self._messages_from_context(compiled_context, user_id, user_message, language)
         if system_prompt_override is not None:
             messages[0] = {"role": "system", "content": system_prompt_override}
         t0 = time.monotonic()
@@ -276,6 +288,22 @@ class ReplyService:
         return {
             "reply": reply,
             "assembled_messages": messages,
+            "context_blocks": [
+                {
+                    "kind": block.kind,
+                    "priority": block.priority,
+                    "confidence": block.confidence,
+                    "source_id": block.source_id,
+                    "freshness_at": (
+                        block.freshness_at.isoformat() if block.freshness_at is not None else None
+                    ),
+                    "sensitivity": block.sensitivity,
+                    "estimated_tokens": block.estimated_tokens,
+                    "placement": block.placement,
+                }
+                for block in compiled_context.blocks
+            ],
+            "context_estimated_tokens": compiled_context.estimated_tokens,
             "latency_ms": latency_ms,
         }
 
@@ -287,6 +315,46 @@ class ReplyService:
         *,
         reply_context: str | None = None,
     ) -> list[dict[str, str]]:
+        compiled_context = await self._compile_context(
+            user_id, user_message, language, reply_context=reply_context
+        )
+        return self._messages_from_context(
+            compiled_context, user_id, user_message, language, reply_context=reply_context
+        )
+
+    def _messages_from_context(
+        self,
+        compiled_context: CompiledContext,
+        user_id: int,
+        user_message: str,
+        language: str,
+        *,
+        reply_context: str | None = None,
+    ) -> list[dict[str, str]]:
+        """Combine compiled system context with the existing live message window."""
+
+        messages: list[dict[str, str]] = [
+            {"role": "system", "content": compiled_context.system_prompt}
+        ]
+        messages.extend(compiled_context.live_messages)
+        messages.append(
+            {
+                "role": "user",
+                "content": _current_user_content(user_message, reply_context, language),
+            }
+        )
+        return messages
+
+    async def _compile_context(
+        self,
+        user_id: int,
+        user_message: str,
+        language: str,
+        *,
+        reply_context: str | None = None,
+    ) -> CompiledContext:
+        """Assemble typed source blocks for the reply system prompt (Phase 20A)."""
+
         profile = self.profile_service.get_or_create_profile(user_id)
         mood = self.mood_service.latest_mood(user_id)
         summary = self.memory_service.get_summary(user_id)
@@ -298,48 +366,102 @@ class ReplyService:
         if self.weather_service is not None and is_weather_query(user_message):
             weather_context = await self.weather_service.get_context(language) or ""
 
-        system_prompt = self.settings_service.resolve_persona_prompt(
-            user_id, language, profile.display_name
-        )
+        blocks: list[ContextBlock] = [
+            context_block(
+                "persona",
+                self.settings_service.resolve_persona_prompt(
+                    user_id, language, profile.display_name
+                ),
+                priority=1000,
+                source_id="resolved_persona",
+                sensitivity="owner_private",
+            )
+        ]
         if mood is not None:
-            system_prompt += (
-                f" Последнее настроение: {mood.mood}/5."
-                if language == "ru"
-                else f" Latest mood: {mood.mood}/5."
+            blocks.append(
+                context_block(
+                    "mood",
+                    (
+                        f" Последнее настроение: {mood.mood}/5."
+                        if language == "ru"
+                        else f" Latest mood: {mood.mood}/5."
+                    ),
+                    priority=900,
+                    source_id=f"mood:{getattr(mood, 'id', None) or user_id}",
+                    freshness_at=_freshness_at(getattr(mood, "recorded_at", None)),
+                    sensitivity="owner_private",
+                )
             )
         if summary is not None:
-            system_prompt += (
-                f" Краткое резюме разговора: {summary.summary}."
-                if language == "ru"
-                else f" Conversation summary: {summary.summary}."
+            blocks.append(
+                context_block(
+                    "summary",
+                    (
+                        f" Краткое резюме разговора: {summary.summary}."
+                        if language == "ru"
+                        else f" Conversation summary: {summary.summary}."
+                    ),
+                    priority=800,
+                    source_id=f"summary:{user_id}",
+                    freshness_at=_freshness_at(getattr(summary, "updated_at", None)),
+                )
             )
         if self.recall_service is not None:
             recall_context = await self.recall_service.retrieve(
                 user_id, user_message, exclude_recent_n=self.memory_service.window_size
             )
             if recall_context:
-                system_prompt += (
-                    f" Из прошлых разговоров: {recall_context}."
-                    if language == "ru"
-                    else f" From past conversations: {recall_context}."
+                blocks.append(
+                    context_block(
+                        "recall",
+                        (
+                            f" Из прошлых разговоров: {recall_context}."
+                            if language == "ru"
+                            else f" From past conversations: {recall_context}."
+                        ),
+                        priority=700,
+                        source_id=f"semantic_recall:{user_id}",
+                    )
                 )
         if self.facts_service is not None:
             facts = self.facts_service.facts_for_prompt(user_id, language)
             if facts:
                 facts_str = "; ".join(f"{k}={v}" for k, v in facts.items())
-                system_prompt += (
-                    f" Известные факты о контакте: {facts_str}."
-                    if language == "ru"
-                    else f" Known facts about this contact: {facts_str}."
+                blocks.append(
+                    context_block(
+                        "facts",
+                        (
+                            f" Известные факты о контакте: {facts_str}."
+                            if language == "ru"
+                            else f" Known facts about this contact: {facts_str}."
+                        ),
+                        priority=600,
+                        source_id=f"contact_facts:{user_id}",
+                    )
                 )
         if rag_context:
-            system_prompt += (
-                f" Заметки: {rag_context}."
-                if language == "ru"
-                else f" Relevant notes: {rag_context}."
+            blocks.append(
+                context_block(
+                    "rag",
+                    (
+                        f" Заметки: {rag_context}."
+                        if language == "ru"
+                        else f" Relevant notes: {rag_context}."
+                    ),
+                    priority=500,
+                    source_id=f"rag:{user_id}",
+                )
             )
         if weather_context:
-            system_prompt += f" {weather_context}"
+            blocks.append(
+                context_block(
+                    "weather",
+                    f" {weather_context}",
+                    priority=400,
+                    source_id="weather",
+                    sensitivity="external",
+                )
+            )
 
         openness = self.settings_service.get_openness(user_id)
         settings = self.settings_service.get_user_settings(user_id)
@@ -349,33 +471,79 @@ class ReplyService:
         if settings.style_learning_enabled and openness != "reserved":
             style = self.memory_service.get_style_profile(user_id)
             if style is not None and style.profile:
-                system_prompt += (
-                    f" Подражай этой манере письма владельца: {style.profile}"
-                    if language == "ru"
-                    else f" Mimic the owner's writing style: {style.profile}"
+                blocks.append(
+                    context_block(
+                        "style",
+                        (
+                            f" Подражай этой манере письма владельца: {style.profile}"
+                            if language == "ru"
+                            else f" Mimic the owner's writing style: {style.profile}"
+                        ),
+                        priority=300,
+                        source_id=f"style:{user_id}",
+                        freshness_at=_freshness_at(getattr(style, "updated_at", None)),
+                        sensitivity="owner_private",
+                    )
                 )
 
-        # Curated few-shot examples: owner-picked ideal replies. Placed before the
-        # openness directive so openness still has the final say on disclosure.
+        # Curated few-shot examples remain before accuracy and openness policy so
+        # their influence cannot override those safety-oriented instructions.
         if self.examples_service is not None:
             examples_block = self.examples_service.examples_block(user_id, language)
             if examples_block:
-                system_prompt += examples_block
+                blocks.append(
+                    context_block(
+                        "examples",
+                        examples_block,
+                        priority=200,
+                        source_id=f"contact_examples:{user_id}",
+                        sensitivity="owner_private",
+                    )
+                )
 
-        system_prompt += _accuracy_directive(language)
-
-        # Openness directive goes LAST so it dominates the persona/tone above.
-        system_prompt += _openness_directive(openness, language)
-
-        messages: list[dict[str, str]] = [{"role": "system", "content": system_prompt}]
-        messages.extend(self.memory_service.as_chat_messages(user_id))
-        messages.append(
-            {
-                "role": "user",
-                "content": _current_user_content(user_message, reply_context, language),
-            }
+        blocks.extend(
+            [
+                context_block("accuracy_policy", _accuracy_directive(language), priority=100),
+                context_block(
+                    "openness_policy",
+                    _openness_directive(openness, language),
+                    priority=0,
+                    source_id=f"openness:{user_id}",
+                    sensitivity="policy",
+                ),
+            ]
         )
-        return messages
+        live_messages = tuple(self.memory_service.as_chat_messages(user_id))
+        if live_messages:
+            live_content = "\n".join(
+                f"{message['role']}: {message['content']}" for message in live_messages
+            )
+            blocks.append(
+                context_block(
+                    "live_window",
+                    live_content,
+                    priority=850,
+                    source_id=f"live_window:{user_id}",
+                    placement="live_window",
+                )
+            )
+        if reply_context:
+            blocks.append(
+                context_block(
+                    "quoted_message",
+                    reply_context,
+                    priority=950,
+                    source_id="reply_context",
+                    placement="quoted_message",
+                )
+            )
+        compiled = self.context_compiler.compile(blocks)
+        return CompiledContext(
+            system_prompt=compiled.system_prompt,
+            blocks=compiled.blocks,
+            estimated_tokens=compiled.estimated_tokens,
+            live_messages=live_messages,
+        )
 
     async def _rewrite_without_cjk(
         self,

@@ -126,3 +126,73 @@ async def test_build_messages_adds_accuracy_priority_and_reply_context() -> None
     assert "сначала точно пойми" in messages[0]["content"]
     assert "не восстанавливай пропущенный смысл по догадке" in messages[0]["content"].lower()
     assert "Цитируемое сообщение (Я)" in messages[-1]["content"]
+
+
+@pytest.mark.asyncio
+async def test_build_messages_tracks_live_window_and_quote_as_context_blocks() -> None:
+    settings_service = MagicMock()
+    settings_service.resolve_persona_prompt.return_value = "Persona"
+    settings_service.get_openness.return_value = "neutral"
+    settings_service.get_user_settings.return_value = MagicMock(style_learning_enabled=False)
+    profile_service = MagicMock()
+    profile_service.get_or_create_profile.return_value = MagicMock(display_name="Way")
+    memory_service = MagicMock()
+    memory_service.get_summary.return_value = None
+    memory_service.as_chat_messages.return_value = [{"role": "assistant", "content": "Earlier"}]
+    mood_service = MagicMock()
+    mood_service.latest_mood.return_value = None
+    service = ReplyService(
+        llm_service=AsyncMock(),
+        memory_service=memory_service,
+        mood_service=mood_service,
+        profile_service=profile_service,
+        settings_service=settings_service,
+        enabled=True,
+    )
+
+    compiled = await service._compile_context(
+        1, "New message", "en", reply_context="Quoted message"
+    )
+    messages = await service._build_messages(
+        1, "New message", "en", reply_context="Quoted message"
+    )
+
+    assert {block.kind for block in compiled.blocks} >= {"live_window", "quoted_message"}
+    assert "Earlier" not in compiled.system_prompt
+    assert messages[1] == {"role": "assistant", "content": "Earlier"}
+
+
+@pytest.mark.asyncio
+async def test_compile_context_records_typed_sources_without_changing_prompt_order() -> None:
+    settings_service = MagicMock()
+    settings_service.resolve_persona_prompt.return_value = "Персона"
+    settings_service.get_openness.return_value = "neutral"
+    settings_service.get_user_settings.return_value = MagicMock(style_learning_enabled=False)
+    profile_service = MagicMock()
+    profile_service.get_or_create_profile.return_value = MagicMock(display_name="Ирина")
+    memory_service = MagicMock()
+    memory_service.get_summary.return_value = MagicMock(summary="Старый разговор")
+    memory_service.as_chat_messages.return_value = []
+    mood_service = MagicMock()
+    mood_service.latest_mood.return_value = MagicMock(mood=4)
+
+    service = ReplyService(
+        llm_service=AsyncMock(),
+        memory_service=memory_service,
+        mood_service=mood_service,
+        profile_service=profile_service,
+        settings_service=settings_service,
+        enabled=True,
+    )
+
+    compiled = await service._compile_context(1, "Привет", "ru")
+
+    assert [block.kind for block in compiled.blocks] == [
+        "persona",
+        "mood",
+        "summary",
+        "accuracy_policy",
+        "openness_policy",
+    ]
+    assert compiled.system_prompt.startswith("Персона Последнее настроение: 4/5.")
+    assert compiled.system_prompt.endswith("не раскрывай лишних личных подробностей.")
