@@ -42,11 +42,12 @@ class OpenAIProvider:
         payload = {
             "model": self.model,
             "messages": request.messages,
-            "temperature": self.temperature,
         }
         payload["max_completion_tokens" if self._uses_completion_tokens else "max_tokens"] = (
             self.max_tokens
         )
+        if not self._uses_completion_tokens:
+            payload["temperature"] = self.temperature
         if not self._uses_completion_tokens:
             payload["stop"] = self._STOP
         headers = {"Authorization": f"Bearer {self.api_key}"}
