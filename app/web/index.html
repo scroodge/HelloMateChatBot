@@ -482,6 +482,11 @@
       <div class="activity-lede">Система нашла черновик и твой реальный ответ. Ничего не попадёт в обучение без подтверждения; уже подтверждённую связь можно убрать из обучения.</div>
       <div id="activity-pairs" style="margin-top:10px"></div>
     </div>
+    <div class="card" id="activity-proposals-card" style="display:none">
+      <div class="card-title">Предложения обучения</div>
+      <div class="activity-lede">Каждое изменение показывает основание и применяется только после подтверждения.</div>
+      <div id="activity-proposals" style="margin-top:10px"></div>
+    </div>
     <div class="card">
       <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
         <span>Последние генерации</span>
@@ -1853,6 +1858,29 @@ function renderOwnerReplyPairs(items) {
   }).join('');
 }
 
+function renderLearningProposals(items) {
+  const card = document.getElementById('activity-proposals-card');
+  const el = document.getElementById('activity-proposals');
+  if (!items.length) { card.style.display = 'none'; return; }
+  card.style.display = '';
+  const labels = {positive_example: 'новый хороший пример', negative_example: 'пример, которого стоит избегать', style_rule: 'правило стиля', boundary: 'граница общения', fact_confirmation: 'подтверждение факта', fact_correction: 'исправление факта'};
+  el.innerHTML = items.map(item => {
+    const pending = item.status === 'pending';
+    const proposed = item.payload.rule || item.payload.reply_text || `${item.payload.key}: ${item.payload.value}`;
+    const evidence = Object.values(item.evidence || {}).join(' · ');
+    const actions = pending ? `<button class="btn btn-sm" style="width:auto" onclick="resolveLearningProposal(${item.id}, 'approve')">Подтвердить</button><button class="btn btn-sm btn-secondary" style="width:auto" onclick="resolveLearningProposal(${item.id}, 'reject')">Отклонить</button>` : '<span class="activity-meta">Подтверждено владельцем</span>';
+    return `<div class="activity-row"><span class="activity-mark ${pending ? 'live' : 'ok'}"></span><div class="activity-copy"><div class="activity-title">${activityContact(item)}: ${escHtml(labels[item.kind] || item.kind)}</div><div class="activity-meta">Предложение: ${escHtml(proposed)}</div><div class="activity-meta">Основание: ${escHtml(evidence)}</div><div class="row" style="margin-top:7px;gap:6px">${actions}</div></div></div>`;
+  }).join('');
+}
+
+async function resolveLearningProposal(id, action) {
+  try {
+    await post(`/admin/learning-proposals/${id}/${action}`, {});
+    toast(action === 'approve' ? 'Предложение подтверждено' : 'Предложение отклонено');
+    loadActivity();
+  } catch (e) { tg.showAlert?.('Ошибка: ' + e.message); }
+}
+
 async function resolveOwnerReplyPair(id, action) {
   try {
     const payload = action === 'confirm' ? {} : {
@@ -1877,12 +1905,13 @@ async function loadActivity() {
   const recentEl = document.getElementById('activity-recent');
   if (!liveEl || !recentEl) return;
   try {
-    const [activity, pairs] = await Promise.all([
-      get('/admin/activity'), get('/admin/owner-reply-pairs'),
+    const [activity, pairs, proposals] = await Promise.all([
+      get('/admin/activity'), get('/admin/owner-reply-pairs'), get('/admin/learning-proposals'),
     ]);
     renderActivityLive(activity.live || []);
     renderActivityRecent(activity.recent || []);
     renderOwnerReplyPairs(pairs || []);
+    renderLearningProposals(proposals || []);
   } catch (e) {
     liveEl.innerHTML = `<div class="error">Не удалось загрузить статус: ${escHtml(e.message)}</div>`;
     recentEl.innerHTML = '';

@@ -24,12 +24,13 @@ from app.services.examples_service import ContactExamplesService
 from app.services.fact_categories_service import FactCategoriesService
 from app.services.greeting_rules_service import GreetingRulesService
 from app.services.greeting_service import GreetingService
+from app.services.learning_proposals_service import LearningProposalsService
 from app.services.memory_service import MemoryService
 from app.services.mood_service import MoodService
 from app.services.owner_reply_pairing_service import OwnerReplyPairingService
 from app.services.persona_service import PersonaService
-from app.services.profile_service import ProfileService
 from app.services.processing_status_service import ProcessingStatusService
+from app.services.profile_service import ProfileService
 from app.services.reply_service import ReplyService
 from app.services.settings_service import SettingsService
 from app.services.suggestions_service import SuggestionsService
@@ -137,6 +138,13 @@ class OwnerReplyPairRejectRequest(BaseModel):
     reason: str | None = None
 
 
+class LearningProposalWriteRequest(BaseModel):
+    user_id: int
+    kind: str
+    payload: dict[str, str]
+    evidence: dict[str, str]
+
+
 # ---------------------------------------------------------------------------
 # Router factory
 # ---------------------------------------------------------------------------
@@ -162,6 +170,7 @@ def create_admin_router(
     feedback_repository: FeedbackRepositoryImpl | None = None,
     processing_status_service: ProcessingStatusService | None = None,
     owner_reply_pairing_service: OwnerReplyPairingService | None = None,
+    learning_proposals_service: LearningProposalsService | None = None,
     *,
     mini_app_dev: bool = False,
     dev_user_id: int | None = None,
@@ -294,6 +303,62 @@ def create_admin_router(
         if not owner_reply_pairing_service.retract(pair_id, request.reason):
             raise HTTPException(status_code=404, detail="Pair is not confirmed")
         return {"retracted": True}
+
+    @router.get("/learning-proposals")
+    async def list_learning_proposals(caller_id: int = AdminUser) -> list[dict[str, Any]]:
+        if learning_proposals_service is None:
+            return []
+        result = []
+        for proposal in learning_proposals_service.list_reviewable():
+            profile = profile_service.get_profile(proposal.user_id)
+            result.append(
+                {
+                    "id": proposal.id,
+                    "user_id": proposal.user_id,
+                    "display_name": profile.display_name if profile else f"ID {proposal.user_id}",
+                    "kind": proposal.kind,
+                    "payload": proposal.payload,
+                    "evidence": proposal.evidence,
+                    "status": proposal.status,
+                    "created_at": proposal.created_at.isoformat(),
+                    "applied_reference": proposal.applied_reference,
+                }
+            )
+        return result
+
+    @router.post("/learning-proposals")
+    async def create_learning_proposal(
+        request: LearningProposalWriteRequest, caller_id: int = AdminUser
+    ) -> dict[str, Any]:
+        if learning_proposals_service is None:
+            raise HTTPException(status_code=503, detail="Learning proposals are not enabled")
+        try:
+            proposal = learning_proposals_service.propose(
+                request.user_id, request.kind, request.payload, request.evidence
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return {"id": proposal.id, "status": proposal.status}
+
+    @router.post("/learning-proposals/{proposal_id}/approve")
+    async def approve_learning_proposal(
+        proposal_id: int, caller_id: int = AdminUser
+    ) -> dict[str, bool]:
+        if learning_proposals_service is None:
+            raise HTTPException(status_code=503, detail="Learning proposals are not enabled")
+        if not learning_proposals_service.approve(proposal_id):
+            raise HTTPException(status_code=404, detail="Proposal is not pending")
+        return {"approved": True}
+
+    @router.post("/learning-proposals/{proposal_id}/reject")
+    async def reject_learning_proposal(
+        proposal_id: int, caller_id: int = AdminUser
+    ) -> dict[str, bool]:
+        if learning_proposals_service is None:
+            raise HTTPException(status_code=503, detail="Learning proposals are not enabled")
+        if not learning_proposals_service.reject(proposal_id):
+            raise HTTPException(status_code=404, detail="Proposal is not pending")
+        return {"rejected": True}
 
     @router.get("/users")
     async def list_users(caller_id: int = AdminUser) -> list[dict[str, Any]]:
@@ -853,16 +918,18 @@ def create_admin_router(
         if processing_status_service is not None:
             for status in processing_status_service.list():
                 profile = profiles.get(status.user_id)
-                out.append({
-                    "id": None,
-                    "user_id": status.user_id,
-                    "display_name": profile.display_name if profile else None,
-                    "contact_message": status.message,
-                    "draft_text": None,
-                    "status": status.status,
-                    "error": status.error,
-                    "created_at": status.updated_at.isoformat(),
-                })
+                out.append(
+                    {
+                        "id": None,
+                        "user_id": status.user_id,
+                        "display_name": profile.display_name if profile else None,
+                        "contact_message": status.message,
+                        "draft_text": None,
+                        "status": status.status,
+                        "error": status.error,
+                        "created_at": status.updated_at.isoformat(),
+                    }
+                )
         for s in suggestions_service.list_pending():
             suggestions_service.viewed(s.id)
             profile = profiles.get(s.user_id)

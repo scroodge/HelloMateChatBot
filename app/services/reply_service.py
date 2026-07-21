@@ -223,6 +223,7 @@ class ReplyService:
         facts_service: object | None = None,
         recall_service: object | None = None,
         examples_service: object | None = None,
+        learning_proposals_service: object | None = None,
         context_compiler: ContextCompiler | None = None,
         context_token_budget: int = 4000,
         enabled: bool = False,
@@ -237,6 +238,7 @@ class ReplyService:
         self.facts_service = facts_service
         self.recall_service = recall_service
         self.examples_service = examples_service
+        self.learning_proposals_service = learning_proposals_service
         self.context_compiler = context_compiler or ContextCompiler(
             token_budget=context_token_budget
         )
@@ -584,6 +586,19 @@ class ReplyService:
                         examples_block,
                         priority=200,
                         source_id=f"contact_examples:{user_id}",
+                        sensitivity="owner_private",
+                    )
+                )
+
+        if self.learning_proposals_service is not None:
+            rules_block = self.learning_proposals_service.approved_rules_block(user_id, language)
+            if rules_block:
+                blocks.append(
+                    context_block(
+                        "owner_rules",
+                        rules_block,
+                        priority=250,
+                        source_id=f"learning_proposals:{user_id}",
                         sensitivity="owner_private",
                     )
                 )

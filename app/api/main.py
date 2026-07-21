@@ -17,12 +17,13 @@ from app.services.examples_service import ContactExamplesService
 from app.services.fact_categories_service import FactCategoriesService
 from app.services.greeting_rules_service import GreetingRulesService
 from app.services.greeting_service import GreetingService
+from app.services.learning_proposals_service import LearningProposalsService
 from app.services.memory_service import MemoryService
 from app.services.mood_service import MoodService
 from app.services.owner_reply_pairing_service import OwnerReplyPairingService
 from app.services.persona_service import PersonaService
-from app.services.profile_service import ProfileService
 from app.services.processing_status_service import ProcessingStatusService
+from app.services.profile_service import ProfileService
 from app.services.reply_service import ReplyService
 from app.services.settings_service import SettingsService
 from app.services.suggestions_service import SuggestionsService
@@ -91,6 +92,9 @@ def create_api_app(config: Config, database: Database, processing_status_service
         enabled=config.summary_enabled and config.ai_replies_enabled,
     )
     examples_service = ContactExamplesService(database.examples)
+    learning_proposals_service = LearningProposalsService(
+        database.learning_proposals, examples_service, facts_service
+    )
     suggestions_service = SuggestionsService(database.suggestions, database.feedback)
     owner_reply_pairing_service = OwnerReplyPairingService(
         database.owner_reply_pairs,
@@ -108,6 +112,7 @@ def create_api_app(config: Config, database: Database, processing_status_service
         weather_service=weather_service,
         facts_service=facts_service,
         examples_service=examples_service,
+        learning_proposals_service=learning_proposals_service,
         context_token_budget=config.context_token_budget,
         enabled=config.ai_replies_enabled,
     )

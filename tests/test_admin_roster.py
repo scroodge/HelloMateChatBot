@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from unittest.mock import MagicMock
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -10,8 +11,10 @@ from fastapi.testclient import TestClient
 from app.api.admin_routes import create_admin_router
 from app.database.db import Database
 from app.models.memory import ConversationMessage
+from app.services.examples_service import ContactExamplesService
 from app.services.greeting_rules_service import GreetingRulesService
 from app.services.greeting_service import GreetingService
+from app.services.learning_proposals_service import LearningProposalsService
 from app.services.memory_service import MemoryService
 from app.services.mood_service import MoodService
 from app.services.owner_reply_pairing_service import OwnerReplyPairingService
@@ -35,6 +38,10 @@ def _make_client(db: Database) -> tuple[TestClient, ProfileService, SettingsServ
     greeting_service = GreetingService(db.greetings, None)
     greeting_rules_service = GreetingRulesService(db.greeting_rules)
     suggestions_service = SuggestionsService(db.suggestions, db.feedback)
+    examples_service = ContactExamplesService(db.examples)
+    learning_proposals_service = LearningProposalsService(
+        db.learning_proposals, examples_service, MagicMock()
+    )
     owner_reply_pairing_service = OwnerReplyPairingService(
         db.owner_reply_pairs,
         suggestions_service,
@@ -64,8 +71,10 @@ def _make_client(db: Database) -> tuple[TestClient, ProfileService, SettingsServ
             greeting_rules_service=greeting_rules_service,
             event_repository=db.events,
             feedback_repository=db.feedback,
+            examples_service=examples_service,
             suggestions_service=suggestions_service,
             owner_reply_pairing_service=owner_reply_pairing_service,
+            learning_proposals_service=learning_proposals_service,
             mini_app_dev=True,  # bypass Telegram auth in tests
             dev_user_id=ADMIN_ID,
         ),
@@ -174,6 +183,29 @@ def test_owner_reply_pair_api_requires_explicit_confirmation(tmp_path) -> None:
     assert retracted.json() == {"retracted": True}
 
 
+def test_learning_proposal_api_requires_explicit_approval(tmp_path) -> None:
+    with Database(f"sqlite:///{tmp_path / 'proposal-api.db'}") as db:
+        client, profile_service, _ = _make_client(db)
+        profile_service.get_or_create_profile(7431073781, display_name="Новый контакт")
+        created = client.post(
+            "/api/admin/learning-proposals",
+            json={
+                "user_id": 7431073781,
+                "kind": "positive_example",
+                "payload": {"contact_message": "Как дела?", "reply_text": "Отлично"},
+                "evidence": {"source": "owner reviewed reply"},
+            },
+        )
+        assert created.status_code == 200
+        proposal_id = created.json()["id"]
+        assert db.examples.list_examples(7431073781) == []
+
+        approved = client.post(f"/api/admin/learning-proposals/{proposal_id}/approve")
+
+    assert approved.status_code == 200
+    assert approved.json() == {"approved": True}
+
+
 def test_contact_detail_exposes_applied_style_layers(tmp_path) -> None:
     from dataclasses import replace
 
@@ -188,7 +220,9 @@ def test_contact_detail_exposes_applied_style_layers(tmp_path) -> None:
         )
         memory = MemoryService(db.memory)
         memory.set_owner_style_profile("global", "общая манера", covered_through_message_id=3)
-        memory.set_owner_style_profile("persona:friend", "манера друзей", covered_through_message_id=4)
+        memory.set_owner_style_profile(
+            "persona:friend", "манера друзей", covered_through_message_id=4
+        )
         memory.set_style_profile(7431073781, "личная деталь", covered_count=5)
 
         response = client.get("/api/admin/users/7431073781")
@@ -302,8 +336,11 @@ def test_export_send_dms_document_to_owner(tmp_path, monkeypatch) -> None:
 
     async def fake_send(bot_token, chat_id, filename, content, caption=""):
         sent.update(
-            bot_token=bot_token, chat_id=chat_id, filename=filename,
-            content=content, caption=caption,
+            bot_token=bot_token,
+            chat_id=chat_id,
+            filename=filename,
+            content=content,
+            caption=caption,
         )
 
     monkeypatch.setattr(admin_routes, "_send_document_via_bot", fake_send)
@@ -313,8 +350,12 @@ def test_export_send_dms_document_to_owner(tmp_path, monkeypatch) -> None:
         profile_service.get_or_create_profile(5336144564, display_name="милая")
         db.memory.add_message(
             ConversationMessage(
-                id=0, user_id=5336144564, role="user", content="привет",
-                created_at=datetime(2026, 6, 19, 12, 0), authored_by="contact",
+                id=0,
+                user_id=5336144564,
+                role="user",
+                content="привет",
+                created_at=datetime(2026, 6, 19, 12, 0),
+                authored_by="contact",
             )
         )
 

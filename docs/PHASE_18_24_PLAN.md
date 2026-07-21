@@ -1,6 +1,6 @@
 # HelloMate — план развития Phase 18–24
 
-_Статус: Phase 18 реализован и deployed; Phase 19 Eval Lab реализован и verified locally; Phase 20 реализован locally (production migration и metrics pending); Phase 21–24 proposal · Последнее обновление: 2026-07-21_
+_Статус: Phase 18–20 реализованы и deployed; Phase 21A–21C реализованы и verified locally; Phase 21C deployment pending; Phase 21D–24 proposal · Последнее обновление: 2026-07-21_
 
 ## 1. Цель
 
@@ -413,7 +413,8 @@ Compiler:
 - Playground уже возвращает source, priority, inclusion reason и token budget
   для каждого context block.
 - Verification: targeted Ruff passed, 264 pytest tests passed, offline Eval Lab
-  regression gate passed. Production deploy и migration ещё не выполнялись.
+  regression gate passed. Production deployment и migration `223344bbccdd`
+  выполнены и подтверждены на Contabo.
 
 ---
 
@@ -443,6 +444,27 @@ global owner style
 Так новый контакт получает разумный cold start, а контакт с богатой историей —
 персональные особенности. `reserved` продолжает иметь приоритет над style mimicry.
 
+### Фактический результат 21A–21B (2026-07-21)
+
+- Добавлена reviewable таблица `owner_reply_pairs` (migration `334455ccddee`).
+  Пара создаётся только при одном pending Suggest draft для того же контакта,
+  ответе владельца в окне до двух часов и отсутствии нового сообщения контакта
+  между draft и ответом владельца.
+- В Mini App на вкладке «Активность» владелец видит evidence пары: сообщение
+  контакта, черновик и свой ответ. Подтверждение создаёт `owner_replied`
+  feedback; отклонение не использует пару; retract удаляет ошибочный signal из
+  feedback/outcome metrics, сохраняя audit record. Никакое действие не
+  отправляет сообщение и не меняет production prompt автоматически.
+- Добавлена таблица `owner_style_profiles` (migration `445566ddeeff`). При
+  включённом style learning reply context получает слои global →
+  persona/relationship → contact-specific. В aggregate profiles попадают
+  только opted-in контакты; `reserved` по-прежнему полностью отключает style
+  mimicry. Все три слоя видны в contact detail Mini App.
+- Verification: полный pytest suite, UI JavaScript syntax check, offline Eval
+  Lab и миграции от предыдущего head прошли успешно. На Contabo commit
+  `5c963f2` развёрнут, контейнер `hellomate-bot` healthy, Alembic head
+  `445566ddeeff` подтверждён.
+
 ### 21C. Предложения обучения
 
 Система может предлагать владельцу:
@@ -455,6 +477,21 @@ global owner style
 
 Каждое предложение показывает evidence и требует подтверждения. Никакие rules не
 добавляются в production prompt скрытно.
+
+### Фактический результат 21C (2026-07-21)
+
+- Добавлена reviewable таблица `learning_proposals` (migration `556677ddeeff`)
+  с типом, структурированным payload, evidence, статусом и ссылкой на применённый
+  результат. Поддержаны positive/negative examples, style rules, boundaries и
+  подтверждение/исправление фактов.
+- Владелец видит предложение и его основание на вкладке «Активность» и отдельно
+  подтверждает или отклоняет его. До подтверждения оно не меняет examples, facts
+  или reply context. Подтверждённые examples записываются через curated-example
+  lifecycle, facts получают `owner_confirmed`, а правила добавляются отдельным,
+  видимым context block с меньшим приоритетом, чем accuracy и openness policy.
+- Верification: 276 pytest tests и offline Eval Lab regression gate прошли
+  локально. Production deployment и migration `556677ddeeff` остаются отдельным
+  шагом.
 
 ### 21D. Candidate optimization
 

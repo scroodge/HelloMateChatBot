@@ -259,6 +259,21 @@ owner_reply_pairs = Table(
     Index("idx_owner_reply_pairs_status_created", "status", "created_at"),
 )
 
+learning_proposals = Table(
+    "learning_proposals",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("user_id", Integer, nullable=False),
+    Column("kind", Text, nullable=False),
+    Column("payload", Text, nullable=False),
+    Column("evidence", Text, nullable=False),
+    Column("status", Text, nullable=False, default="pending"),
+    Column("applied_reference", Text),
+    Column("created_at", Text, nullable=False),
+    Column("resolved_at", Text),
+    Index("idx_learning_proposals_status_created", "status", "created_at"),
+)
+
 generation_runs = Table(
     "generation_runs",
     metadata,
