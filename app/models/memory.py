@@ -38,3 +38,13 @@ class ContactStyleProfile:
     profile: str
     updated_at: datetime
     covered_count: int = 0  # number of owner messages already folded into the profile
+
+
+@dataclass(frozen=True, slots=True)
+class OwnerStyleProfile:
+    """Learned owner style at the global or relationship/persona level."""
+
+    scope_key: str
+    profile: str
+    updated_at: datetime
+    covered_through_message_id: int = 0

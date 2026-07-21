@@ -14,10 +14,12 @@ from app.services.greeting_rules_service import GreetingRulesService
 from app.services.greeting_service import GreetingService
 from app.services.memory_service import MemoryService
 from app.services.mood_service import MoodService
+from app.services.owner_reply_pairing_service import OwnerReplyPairingService
 from app.services.persona_service import PersonaService
 from app.services.profile_service import ProfileService
 from app.services.reply_service import ReplyService
 from app.services.settings_service import SettingsService
+from app.services.suggestions_service import SuggestionsService
 
 ADMIN_ID = 100000001
 
@@ -32,6 +34,12 @@ def _make_client(db: Database) -> tuple[TestClient, ProfileService, SettingsServ
     )
     greeting_service = GreetingService(db.greetings, None)
     greeting_rules_service = GreetingRulesService(db.greeting_rules)
+    suggestions_service = SuggestionsService(db.suggestions, db.feedback)
+    owner_reply_pairing_service = OwnerReplyPairingService(
+        db.owner_reply_pairs,
+        suggestions_service,
+        memory_service,
+    )
     reply_service = ReplyService(
         llm_service=None,
         memory_service=memory_service,
@@ -56,6 +64,8 @@ def _make_client(db: Database) -> tuple[TestClient, ProfileService, SettingsServ
             greeting_rules_service=greeting_rules_service,
             event_repository=db.events,
             feedback_repository=db.feedback,
+            suggestions_service=suggestions_service,
+            owner_reply_pairing_service=owner_reply_pairing_service,
             mini_app_dev=True,  # bypass Telegram auth in tests
             dev_user_id=ADMIN_ID,
         ),
@@ -125,6 +135,70 @@ def test_activity_feed_exposes_metadata_without_prompt_or_reply(tmp_path) -> Non
     assert recent[0]["prompt_version"] == "reply-v1"
     assert "messages" not in recent[0]
     assert "draft_text" not in recent[0]
+
+
+def test_owner_reply_pair_api_requires_explicit_confirmation(tmp_path) -> None:
+    with Database(f"sqlite:///{tmp_path / 'pair-api.db'}") as db:
+        client, profile_service, _ = _make_client(db)
+        profile_service.get_or_create_profile(7431073781, display_name="Новый контакт")
+        memory = MemoryService(db.memory)
+        suggestions = SuggestionsService(db.suggestions, db.feedback)
+        pairing = OwnerReplyPairingService(db.owner_reply_pairs, suggestions, memory)
+        memory.record_user_message(7431073781, "Как дела?")
+        suggestion = suggestions.record(7431073781, "Как дела?", "Черновик ответа")
+        assert suggestion is not None
+        owner_message = memory.record_assistant_message(
+            7431073781,
+            "Всё хорошо, спасибо",
+            authored_by="owner",
+        )
+        pair = pairing.observe_owner_reply(owner_message)
+        assert pair is not None
+
+        pending = client.get("/api/admin/owner-reply-pairs")
+        assert pending.status_code == 200
+        assert pending.json()[0]["owner_reply_text"] == "Всё хорошо, спасибо"
+        assert suggestions.get(suggestion.id).status == "pending"
+
+        confirmed = client.post(f"/api/admin/owner-reply-pairs/{pair.id}/confirm")
+        assert suggestions.get(suggestion.id).status == "owner_replied"
+        retracted = client.post(
+            f"/api/admin/owner-reply-pairs/{pair.id}/retract",
+            json={"reason": "связь неверная"},
+        )
+        assert suggestions.get(suggestion.id).status == "pair_retracted"
+
+    assert confirmed.status_code == 200
+    assert confirmed.json() == {"confirmed": True}
+    assert retracted.status_code == 200
+    assert retracted.json() == {"retracted": True}
+
+
+def test_contact_detail_exposes_applied_style_layers(tmp_path) -> None:
+    from dataclasses import replace
+
+    with Database(f"sqlite:///{tmp_path / 'style-layers-api.db'}") as db:
+        client, _, settings_service = _make_client(db)
+        settings_service.save_user_settings(
+            replace(
+                settings_service.get_user_settings(7431073781),
+                style_learning_enabled=True,
+                persona_preset="friend",
+            )
+        )
+        memory = MemoryService(db.memory)
+        memory.set_owner_style_profile("global", "общая манера", covered_through_message_id=3)
+        memory.set_owner_style_profile("persona:friend", "манера друзей", covered_through_message_id=4)
+        memory.set_style_profile(7431073781, "личная деталь", covered_count=5)
+
+        response = client.get("/api/admin/users/7431073781")
+
+    assert response.status_code == 200
+    assert response.json()["style_profiles"] == {
+        "global": "общая манера",
+        "relationship": "манера друзей",
+        "contact": "личная деталь",
+    }
 
 
 def test_persona_too_long_returns_422_not_500(tmp_path) -> None:

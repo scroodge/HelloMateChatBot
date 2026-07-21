@@ -66,6 +66,7 @@ from app.services.llm import LLMService
 from app.services.llm.factory import build_llm_provider
 from app.services.memory_service import MemoryService
 from app.services.mood_service import MoodService
+from app.services.owner_reply_pairing_service import OwnerReplyPairingService
 from app.services.persona_service import PersonaService
 from app.services.profile_service import ProfileService
 from app.services.processing_status_service import ProcessingStatusService
@@ -153,6 +154,11 @@ def build_application(config: Config, database: Database, processing_status_serv
     )
     examples_service = ContactExamplesService(database.examples)
     suggestions_service = SuggestionsService(database.suggestions, database.feedback)
+    owner_reply_pairing_service = OwnerReplyPairingService(
+        database.owner_reply_pairs,
+        suggestions_service,
+        memory_service,
+    )
     processing_status_service = processing_status_service or ProcessingStatusService()
     assistant_service = AssistantService(
         repository=database.assistant_profiles,
@@ -210,6 +216,7 @@ def build_application(config: Config, database: Database, processing_status_serv
     application.bot_data["recall_service"] = recall_service
     application.bot_data["examples_service"] = examples_service
     application.bot_data["suggestions_service"] = suggestions_service
+    application.bot_data["owner_reply_pairing_service"] = owner_reply_pairing_service
     application.bot_data["processing_status_service"] = processing_status_service
     application.bot_data["assistant_service"] = assistant_service
     application.bot_data["reply_service"] = reply_service

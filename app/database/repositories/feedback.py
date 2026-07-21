@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import Integer, cast, func, insert, select, update
+from sqlalchemy import Integer, cast, delete, func, insert, select, update
 
 from app.database.schema import (
     feedback_events,
@@ -106,6 +106,21 @@ class FeedbackRepositoryImpl:
         )
         with self._db.engine.begin() as conn:
             conn.execute(insert(suggestion_outcomes).values(**values))
+
+    def remove_owner_reply_learning(self, suggestion_id: int) -> None:
+        """Remove the outcome and event created by a retracted owner-reply pair."""
+        with self._db.engine.begin() as conn:
+            conn.execute(
+                delete(suggestion_outcomes).where(
+                    suggestion_outcomes.c.suggestion_id == suggestion_id
+                )
+            )
+            conn.execute(
+                delete(feedback_events).where(
+                    feedback_events.c.suggestion_id == suggestion_id,
+                    feedback_events.c.event_type == "owner_replied",
+                )
+            )
 
     def analytics(self, *, user_id: int | None, since: datetime | None) -> dict[str, Any]:
         event_query = select(feedback_events.c.event_type, func.count().label("count")).select_from(

@@ -19,6 +19,7 @@ from app.services.greeting_rules_service import GreetingRulesService
 from app.services.greeting_service import GreetingService
 from app.services.memory_service import MemoryService
 from app.services.mood_service import MoodService
+from app.services.owner_reply_pairing_service import OwnerReplyPairingService
 from app.services.persona_service import PersonaService
 from app.services.profile_service import ProfileService
 from app.services.processing_status_service import ProcessingStatusService
@@ -91,6 +92,11 @@ def create_api_app(config: Config, database: Database, processing_status_service
     )
     examples_service = ContactExamplesService(database.examples)
     suggestions_service = SuggestionsService(database.suggestions, database.feedback)
+    owner_reply_pairing_service = OwnerReplyPairingService(
+        database.owner_reply_pairs,
+        suggestions_service,
+        memory_service,
+    )
     processing_status_service = processing_status_service or ProcessingStatusService()
     reply_service = ReplyService(
         llm_service=llm_service,
@@ -140,6 +146,7 @@ def create_api_app(config: Config, database: Database, processing_status_service
             summary_service=summary_service,
             feedback_repository=database.feedback,
             processing_status_service=processing_status_service,
+            owner_reply_pairing_service=owner_reply_pairing_service,
             mini_app_dev=config.mini_app_dev,
             dev_user_id=dev_user_id,
         ),

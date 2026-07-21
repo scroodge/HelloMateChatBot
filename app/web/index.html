@@ -477,6 +477,11 @@
       <div class="activity-lede">Только служебный статус. Тексты переписки и промпты здесь не показываются.</div>
       <div id="activity-live" style="margin-top:10px"><div class="spinner">Загрузка...</div></div>
     </div>
+    <div class="card" id="activity-pairs-card" style="display:none">
+      <div class="card-title">Проверить обучение</div>
+      <div class="activity-lede">Система нашла черновик и твой реальный ответ. Ничего не попадёт в обучение без подтверждения; уже подтверждённую связь можно убрать из обучения.</div>
+      <div id="activity-pairs" style="margin-top:10px"></div>
+    </div>
     <div class="card">
       <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
         <span>Последние генерации</span>
@@ -1063,7 +1068,7 @@ async function openContact(userId) {
     document.getElementById('openness-effective-label').textContent = 'Сейчас действует: ' + effOpen;
 
     // learned style
-    renderStyle(u.style_profile);
+    renderStyle(u.style_profiles || { contact: u.style_profile });
 
     // known facts
     renderFacts(u.facts || {});
@@ -1825,14 +1830,59 @@ function renderActivityRecent(items) {
   }).join('');
 }
 
+function renderOwnerReplyPairs(items) {
+  const card = document.getElementById('activity-pairs-card');
+  const el = document.getElementById('activity-pairs');
+  if (!items.length) { card.style.display = 'none'; return; }
+  card.style.display = '';
+  el.innerHTML = items.map(pair => {
+    const pending = pair.status === 'pending';
+    const title = pending ? 'найден возможный пример' : 'пара добавлена в обучение';
+    const actions = pending
+      ? `<button class="btn btn-sm" style="width:auto" onclick="resolveOwnerReplyPair(${pair.id}, 'confirm')">Подтвердить</button>
+         <button class="btn btn-sm btn-secondary" style="width:auto" onclick="resolveOwnerReplyPair(${pair.id}, 'reject')">Не связывать</button>`
+      : `<button class="btn btn-sm btn-secondary" style="width:auto" onclick="resolveOwnerReplyPair(${pair.id}, 'retract')">Убрать из обучения</button>`;
+    return `<div class="activity-row" id="pair-${pair.id}">
+    <span class="activity-mark ${pending ? 'live' : 'ok'}"></span>
+    <div class="activity-copy"><div class="activity-title">${activityContact(pair)}: ${title}</div>
+    <div class="activity-meta">Сообщение: ${escHtml(pair.contact_message)}</div>
+    <div class="activity-meta">Черновик: ${escHtml(pair.draft_text)}</div>
+    <div class="activity-meta">Твой ответ: ${escHtml(pair.owner_reply_text)}</div>
+    <div class="row" style="margin-top:7px;gap:6px">${actions}</div></div>
+  </div>`;
+  }).join('');
+}
+
+async function resolveOwnerReplyPair(id, action) {
+  try {
+    const payload = action === 'confirm' ? {} : {
+      reason: action === 'retract' ? 'owner_retracted_pair' : 'owner_rejected_pair',
+    };
+    await post(`/admin/owner-reply-pairs/${id}/${action}`, payload);
+    document.getElementById(`pair-${id}`)?.remove();
+    const messages = {
+      confirm: 'Пара подтверждена',
+      reject: 'Связь отклонена',
+      retract: 'Пара убрана из обучения',
+    };
+    toast(messages[action]);
+    loadActivity();
+  } catch (e) {
+    tg.showAlert?.('Ошибка: ' + e.message);
+  }
+}
+
 async function loadActivity() {
   const liveEl = document.getElementById('activity-live');
   const recentEl = document.getElementById('activity-recent');
   if (!liveEl || !recentEl) return;
   try {
-    const activity = await get('/admin/activity');
+    const [activity, pairs] = await Promise.all([
+      get('/admin/activity'), get('/admin/owner-reply-pairs'),
+    ]);
     renderActivityLive(activity.live || []);
     renderActivityRecent(activity.recent || []);
+    renderOwnerReplyPairs(pairs || []);
   } catch (e) {
     liveEl.innerHTML = `<div class="error">Не удалось загрузить статус: ${escHtml(e.message)}</div>`;
     recentEl.innerHTML = '';
@@ -1841,12 +1891,19 @@ async function loadActivity() {
 
 // ── Learned style ────────────────────────────────────────────────────────────
 
-function renderStyle(profile) {
+function renderStyle(profiles) {
   const card = document.getElementById('style-card');
   const el = document.getElementById('detail-style');
-  if (profile && profile.trim()) {
+  const values = typeof profiles === 'string' ? { contact: profiles } : (profiles || {});
+  const labels = {
+    global: 'Общая манера',
+    relationship: 'Манера для этой роли',
+    contact: 'Особенность этого контакта',
+  };
+  const layers = Object.entries(labels).filter(([key]) => values[key] && values[key].trim());
+  if (layers.length) {
     card.style.display = '';
-    el.textContent = profile;
+    el.innerHTML = layers.map(([key, label]) => `<div style="margin-bottom:6px"><b>${label}</b><br>${escHtml(values[key])}</div>`).join('');
   } else {
     card.style.display = 'none';
     el.textContent = '';

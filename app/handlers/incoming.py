@@ -147,10 +147,11 @@ async def _process_incoming_text(
             display_name=contact_display_name,
         )
 
+    owner_message = None
     if isinstance(memory_service, MemoryService) and message_text:
         if sender_is_owner:
             # Real human reply typed by the owner — feeds style learning.
-            memory_service.record_assistant_message(
+            owner_message = memory_service.record_assistant_message(
                 contact_user_id, message_text, authored_by="owner"
             )
         else:
@@ -179,8 +180,9 @@ async def _process_incoming_text(
         style_service.schedule_refresh(contact_user_id)
 
     if sender_is_owner:
-        if suggestions_service is not None and message_text:
-            suggestions_service.owner_replied(contact_user_id, message_text)
+        pairing_service = context.bot_data.get("owner_reply_pairing_service")
+        if pairing_service is not None and owner_message is not None:
+            pairing_service.observe_owner_reply(owner_message)
         return
 
     if not isinstance(greeting_service, GreetingService):

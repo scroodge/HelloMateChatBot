@@ -27,6 +27,7 @@ from app.database.repositories.greeting import GreetingRepositoryImpl
 from app.database.repositories.greeting_rules import GreetingRulesRepositoryImpl
 from app.database.repositories.memory import MemoryRepositoryImpl
 from app.database.repositories.mood import MoodRepositoryImpl
+from app.database.repositories.owner_reply_pairs import OwnerReplyPairsRepositoryImpl
 from app.database.repositories.profile import ProfileRepositoryImpl
 from app.database.repositories.settings import SettingsRepositoryImpl
 from app.database.repositories.suggestions import SuggestionsRepositoryImpl
@@ -44,6 +45,7 @@ class Database:
         self.examples = ContactExamplesRepositoryImpl(self)
         self.suggestions = SuggestionsRepositoryImpl(self)
         self.feedback = FeedbackRepositoryImpl(self)
+        self.owner_reply_pairs = OwnerReplyPairsRepositoryImpl(self)
         self.facts = ContactFactsRepositoryImpl(self)
         self.fact_categories = FactCategoriesRepositoryImpl(self)
         self.assistant_profiles = AssistantProfilesRepositoryImpl(self)

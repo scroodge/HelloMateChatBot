@@ -102,11 +102,23 @@ class SuggestionsService:
         self.repository.set_status(suggestion_id, "accepted")
         self._record_decision(suggestion, final_text, reason)
 
-    def owner_replied(self, user_id: int, final_text: str) -> None:
-        for suggestion in self.list_pending():
-            if suggestion.user_id == user_id:
-                self.repository.set_status(suggestion.id, "owner_replied")
-                self._record_decision(suggestion, final_text, None, event_type="owner_replied")
+    def mark_owner_reply(self, suggestion_id: int, final_text: str) -> None:
+        """Confirm an owner-reviewed pairing and retain its outcome for analytics."""
+        suggestion = self.get(suggestion_id)
+        if suggestion is None or suggestion.status != "pending":
+            return
+        self.repository.set_status(suggestion_id, "owner_replied")
+        self._record_decision(suggestion, final_text, None, event_type="owner_replied")
+
+    def retract_owner_reply(self, suggestion_id: int) -> bool:
+        """Remove a confirmed owner-reply signal after the owner corrects a pairing."""
+        suggestion = self.get(suggestion_id)
+        if suggestion is None or suggestion.status != "owner_replied":
+            return False
+        self.repository.set_status(suggestion_id, "pair_retracted")
+        if self.feedback_repository is not None:
+            self.feedback_repository.remove_owner_reply_learning(suggestion_id)
+        return True
 
     def _record_decision(
         self,

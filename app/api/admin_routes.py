@@ -26,6 +26,7 @@ from app.services.greeting_rules_service import GreetingRulesService
 from app.services.greeting_service import GreetingService
 from app.services.memory_service import MemoryService
 from app.services.mood_service import MoodService
+from app.services.owner_reply_pairing_service import OwnerReplyPairingService
 from app.services.persona_service import PersonaService
 from app.services.profile_service import ProfileService
 from app.services.processing_status_service import ProcessingStatusService
@@ -35,6 +36,14 @@ from app.services.suggestions_service import SuggestionsService
 from app.services.summary_service import SummaryService
 
 logger = logging.getLogger(__name__)
+
+
+def _owner_style_scope_key(settings: object) -> str | None:
+    preset = (getattr(settings, "persona_preset", None) or "").strip().casefold()
+    if preset:
+        return f"persona:{preset}"
+    relationship = (getattr(settings, "persona_relationship", None) or "").strip().casefold()
+    return f"relationship:{relationship[:80]}" if relationship else None
 
 
 async def _send_document_via_bot(
@@ -124,6 +133,10 @@ class SuggestionDismissRequest(BaseModel):
     reason: str | None = None
 
 
+class OwnerReplyPairRejectRequest(BaseModel):
+    reason: str | None = None
+
+
 # ---------------------------------------------------------------------------
 # Router factory
 # ---------------------------------------------------------------------------
@@ -148,6 +161,7 @@ def create_admin_router(
     summary_service: SummaryService | None = None,
     feedback_repository: FeedbackRepositoryImpl | None = None,
     processing_status_service: ProcessingStatusService | None = None,
+    owner_reply_pairing_service: OwnerReplyPairingService | None = None,
     *,
     mini_app_dev: bool = False,
     dev_user_id: int | None = None,
@@ -222,6 +236,64 @@ def create_admin_router(
             "live": live,
             "recent": recent,
         }
+
+    @router.get("/owner-reply-pairs")
+    async def list_owner_reply_pairs(caller_id: int = AdminUser) -> list[dict[str, Any]]:
+        """Pending owner-reply pairings. They require explicit confirmation to learn."""
+        if owner_reply_pairing_service is None or suggestions_service is None:
+            return []
+        result = []
+        for pair in owner_reply_pairing_service.list_reviewable():
+            suggestion = suggestions_service.get(pair.suggestion_id)
+            if suggestion is None:
+                continue
+            profile = profile_service.get_profile(pair.user_id)
+            result.append(
+                {
+                    "id": pair.id,
+                    "user_id": pair.user_id,
+                    "display_name": profile.display_name if profile else f"ID {pair.user_id}",
+                    "contact_message": suggestion.contact_message,
+                    "draft_text": suggestion.draft_text,
+                    "owner_reply_text": pair.owner_reply_text,
+                    "confidence": pair.confidence,
+                    "status": pair.status,
+                    "created_at": pair.created_at.isoformat(),
+                }
+            )
+        return result
+
+    @router.post("/owner-reply-pairs/{pair_id}/confirm")
+    async def confirm_owner_reply_pair(pair_id: int, caller_id: int = AdminUser) -> dict[str, bool]:
+        if owner_reply_pairing_service is None:
+            raise HTTPException(status_code=503, detail="Owner learning is not enabled")
+        if not owner_reply_pairing_service.confirm(pair_id):
+            raise HTTPException(status_code=404, detail="Pair is not pending")
+        return {"confirmed": True}
+
+    @router.post("/owner-reply-pairs/{pair_id}/reject")
+    async def reject_owner_reply_pair(
+        pair_id: int,
+        request: OwnerReplyPairRejectRequest,
+        caller_id: int = AdminUser,
+    ) -> dict[str, bool]:
+        if owner_reply_pairing_service is None:
+            raise HTTPException(status_code=503, detail="Owner learning is not enabled")
+        if not owner_reply_pairing_service.reject(pair_id, request.reason):
+            raise HTTPException(status_code=404, detail="Pair is not pending")
+        return {"rejected": True}
+
+    @router.post("/owner-reply-pairs/{pair_id}/retract")
+    async def retract_owner_reply_pair(
+        pair_id: int,
+        request: OwnerReplyPairRejectRequest,
+        caller_id: int = AdminUser,
+    ) -> dict[str, bool]:
+        if owner_reply_pairing_service is None:
+            raise HTTPException(status_code=503, detail="Owner learning is not enabled")
+        if not owner_reply_pairing_service.retract(pair_id, request.reason):
+            raise HTTPException(status_code=404, detail="Pair is not confirmed")
+        return {"retracted": True}
 
     @router.get("/users")
     async def list_users(caller_id: int = AdminUser) -> list[dict[str, Any]]:
@@ -299,6 +371,13 @@ def create_admin_router(
         contact_facts = facts_service.facts_structured(user_id) if facts_service is not None else {}
 
         style = memory_service.get_style_profile(user_id)
+        relationship_scope = _owner_style_scope_key(settings)
+        global_style = memory_service.get_owner_style_profile("global")
+        relationship_style = (
+            memory_service.get_owner_style_profile(relationship_scope)
+            if relationship_scope
+            else None
+        )
 
         examples = (
             [
@@ -329,6 +408,11 @@ def create_admin_router(
             "effective_openness": settings_service.get_openness(user_id),
             "style_learning_enabled": settings.style_learning_enabled,
             "style_profile": style.profile if style else None,
+            "style_profiles": {
+                "global": global_style.profile if global_style else None,
+                "relationship": relationship_style.profile if relationship_style else None,
+                "contact": style.profile if style else None,
+            },
             "persona": {
                 "source": persona_source,
                 "resolved_prompt": prompt,

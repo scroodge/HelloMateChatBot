@@ -9,6 +9,7 @@ from app.models.memory import (
     ContactStyleProfile,
     ConversationMessage,
     ConversationSummary,
+    OwnerStyleProfile,
 )
 
 
@@ -104,6 +105,10 @@ class MemoryService:
 
         return self.repository.count_messages(user_id)
 
+    def has_contact_message_between(self, user_id: int, after: datetime, before: datetime) -> bool:
+        """Whether fresh contact context arrived after a draft was created."""
+        return self.repository.has_contact_message_between(user_id, after, before)
+
     def messages_slice(self, user_id: int, *, offset: int, limit: int) -> list[ConversationMessage]:
         """Return messages oldest-first within [offset, offset+limit)."""
 
@@ -127,6 +132,14 @@ class MemoryService:
         """Return owner-authored messages oldest-first within [offset, offset+limit)."""
 
         return self.repository.list_owner_messages_asc(user_id, offset=offset, limit=limit)
+
+    def owner_messages_after_id(
+        self, user_ids: set[int], *, after_id: int, limit: int
+    ) -> list[ConversationMessage]:
+        """Owner-authored messages newer than an aggregate style watermark."""
+        return self.repository.list_owner_messages_after_id(
+            user_ids, after_id=after_id, limit=limit
+        )
 
     def get_style_profile(self, user_id: int) -> ContactStyleProfile | None:
         """Return the learned owner-style profile for a contact."""
@@ -154,6 +167,26 @@ class MemoryService:
         """Remove the learned owner-style profile for a contact."""
 
         self.repository.delete_style_profile(user_id)
+
+    def get_owner_style_profile(self, scope_key: str) -> OwnerStyleProfile | None:
+        """Return a global or relationship/persona owner-style profile."""
+        return self.repository.get_owner_style_profile(scope_key)
+
+    def set_owner_style_profile(
+        self,
+        scope_key: str,
+        profile: str,
+        covered_through_message_id: int,
+        now: datetime | None = None,
+    ) -> OwnerStyleProfile:
+        """Persist a global or relationship/persona owner-style profile."""
+        item = OwnerStyleProfile(
+            scope_key=scope_key,
+            profile=profile,
+            updated_at=now or datetime.now().astimezone(),
+            covered_through_message_id=covered_through_message_id,
+        )
+        return self.repository.set_owner_style_profile(item)
 
     # ── Semantic recall (Phase 13) ────────────────────────────────────────────
 

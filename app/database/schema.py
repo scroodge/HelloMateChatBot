@@ -117,6 +117,16 @@ contact_style_profiles = Table(
     Column("updated_at", Text, nullable=False),
 )
 
+owner_style_profiles = Table(
+    "owner_style_profiles",
+    metadata,
+    Column("scope_key", Text, primary_key=True),
+    Column("profile", Text, nullable=False),
+    # Highest conversation_messages.id folded into this aggregate profile.
+    Column("covered_through_message_id", Integer, nullable=False, default=0),
+    Column("updated_at", Text, nullable=False),
+)
+
 documents = Table(
     "documents",
     metadata,
@@ -231,6 +241,22 @@ suggestions = Table(
     Column("created_at", Text, nullable=False),
     Index("idx_suggestions_status_created", "status", "created_at"),
     Index("idx_suggestions_user", "user_id"),
+)
+
+owner_reply_pairs = Table(
+    "owner_reply_pairs",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("suggestion_id", Integer, nullable=False, unique=True),
+    Column("user_id", Integer, nullable=False),
+    Column("owner_message_id", Integer, nullable=False),
+    Column("owner_reply_text", Text, nullable=False),
+    Column("confidence", Float, nullable=False),
+    Column("status", Text, nullable=False, default="pending"),
+    Column("reason", Text),
+    Column("created_at", Text, nullable=False),
+    Column("resolved_at", Text),
+    Index("idx_owner_reply_pairs_status_created", "status", "created_at"),
 )
 
 generation_runs = Table(
