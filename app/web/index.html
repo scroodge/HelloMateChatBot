@@ -664,6 +664,10 @@
         </div>
       </div>
     </div>
+    <div class="card" id="pg-context-card" style="display:none">
+      <div class="card-title">Контекст ответа</div>
+      <div id="pg-context-meta"></div>
+    </div>
     <div class="card">
       <div class="row">
         <input type="text" id="pg-message" placeholder="Введите сообщение..." onkeydown="if(event.key==='Enter')sendPlayground()">
@@ -1735,6 +1739,7 @@ async function sendPlayground() {
     });
     box.innerHTML += `<div class="msg-bubble msg-assistant">${escHtml(res.reply)}</div>`;
     document.getElementById('latency-label').textContent = `${res.latency_ms} мс`;
+    renderPlaygroundContext(res);
 
     // remember last exchange so it can be saved as a few-shot example
     lastPlaygroundExchange = { user_id: parseInt(userId), contact_message: msg, reply_text: res.reply };
@@ -1757,6 +1762,25 @@ async function sendPlayground() {
     box.innerHTML += `<div class="error">${e.message}</div>`;
     document.getElementById('latency-label').textContent = '';
   }
+}
+
+function renderPlaygroundContext(res) {
+  const card = document.getElementById('pg-context-card');
+  const target = document.getElementById('pg-context-meta');
+  const blocks = res.context_blocks || [];
+  if (!blocks.length) { card.style.display = 'none'; return; }
+
+  card.style.display = '';
+  const totals = `${res.context_estimated_tokens || 0} / ${res.context_considered_tokens || 0} токенов`;
+  target.innerHTML = `<div class="contact-meta" style="margin-bottom:7px">Включено / рассмотрено: ${escHtml(totals)}</div>` +
+    blocks.map(block => {
+      const status = block.included ? '✓ включён' : '— исключён';
+      const source = block.source_id ? ` · ${escHtml(block.source_id)}` : '';
+      return `<div class="contact-meta" style="padding:5px 0;border-top:1px solid var(--sep,#eee)">
+        <strong>${escHtml(block.kind)}</strong> — ${status}, приоритет ${block.priority}, ~${block.estimated_tokens} токенов${source}<br>
+        <span style="color:var(--hint)">${escHtml(block.inclusion_reason || '')}</span>
+      </div>`;
+    }).join('');
 }
 
 // ── Stats ────────────────────────────────────────────────────────────────────

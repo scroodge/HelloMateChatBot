@@ -187,6 +187,7 @@ class ReplyService:
         recall_service: object | None = None,
         examples_service: object | None = None,
         context_compiler: ContextCompiler | None = None,
+        context_token_budget: int = 4000,
         enabled: bool = False,
     ) -> None:
         self.llm_service = llm_service
@@ -199,7 +200,9 @@ class ReplyService:
         self.facts_service = facts_service
         self.recall_service = recall_service
         self.examples_service = examples_service
-        self.context_compiler = context_compiler or ContextCompiler()
+        self.context_compiler = context_compiler or ContextCompiler(
+            token_budget=context_token_budget
+        )
         self.enabled = enabled
 
     async def generate_reply(
@@ -290,20 +293,25 @@ class ReplyService:
             "assembled_messages": messages,
             "context_blocks": [
                 {
-                    "kind": block.kind,
-                    "priority": block.priority,
-                    "confidence": block.confidence,
-                    "source_id": block.source_id,
+                    "kind": decision.block.kind,
+                    "priority": decision.block.priority,
+                    "confidence": decision.block.confidence,
+                    "source_id": decision.block.source_id,
                     "freshness_at": (
-                        block.freshness_at.isoformat() if block.freshness_at is not None else None
+                        decision.block.freshness_at.isoformat()
+                        if decision.block.freshness_at is not None
+                        else None
                     ),
-                    "sensitivity": block.sensitivity,
-                    "estimated_tokens": block.estimated_tokens,
-                    "placement": block.placement,
+                    "sensitivity": decision.block.sensitivity,
+                    "estimated_tokens": decision.block.estimated_tokens,
+                    "placement": decision.block.placement,
+                    "included": decision.included,
+                    "inclusion_reason": decision.reason,
                 }
-                for block in compiled_context.blocks
+                for decision in compiled_context.decisions
             ],
             "context_estimated_tokens": compiled_context.estimated_tokens,
+            "context_considered_tokens": compiled_context.considered_tokens,
             "latency_ms": latency_ms,
         }
 
@@ -340,7 +348,9 @@ class ReplyService:
         messages.append(
             {
                 "role": "user",
-                "content": _current_user_content(user_message, reply_context, language),
+                "content": _current_user_content(
+                    user_message, compiled_context.reply_context, language
+                ),
             }
         )
         return messages
@@ -375,6 +385,7 @@ class ReplyService:
                 priority=1000,
                 source_id="resolved_persona",
                 sensitivity="owner_private",
+                required=True,
             )
         ]
         if mood is not None:
@@ -489,7 +500,9 @@ class ReplyService:
         # Curated few-shot examples remain before accuracy and openness policy so
         # their influence cannot override those safety-oriented instructions.
         if self.examples_service is not None:
-            examples_block = self.examples_service.examples_block(user_id, language)
+            examples_block = self.examples_service.examples_block(
+                user_id, language, query=user_message
+            )
             if examples_block:
                 blocks.append(
                     context_block(
@@ -503,13 +516,19 @@ class ReplyService:
 
         blocks.extend(
             [
-                context_block("accuracy_policy", _accuracy_directive(language), priority=100),
+                context_block(
+                    "accuracy_policy",
+                    _accuracy_directive(language),
+                    priority=100,
+                    required=True,
+                ),
                 context_block(
                     "openness_policy",
                     _openness_directive(openness, language),
                     priority=0,
                     source_id=f"openness:{user_id}",
                     sensitivity="policy",
+                    required=True,
                 ),
             ]
         )
@@ -538,11 +557,15 @@ class ReplyService:
                 )
             )
         compiled = self.context_compiler.compile(blocks)
+        included_kinds = {block.kind for block in compiled.blocks}
         return CompiledContext(
             system_prompt=compiled.system_prompt,
             blocks=compiled.blocks,
             estimated_tokens=compiled.estimated_tokens,
-            live_messages=live_messages,
+            live_messages=live_messages if "live_window" in included_kinds else (),
+            reply_context=reply_context if "quoted_message" in included_kinds else None,
+            decisions=compiled.decisions,
+            considered_tokens=compiled.considered_tokens,
         )
 
     async def _rewrite_without_cjk(

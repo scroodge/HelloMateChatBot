@@ -231,6 +231,7 @@ chmod +x update.sh
 | `LLM_EMBEDDING_MODEL` | `bge-m3:latest` | Embedding model for RAG (`/remember`) and semantic recall |
 | `LLM_API_KEY` | empty | API key for cloud provider |
 | `LLM_MAX_TOKENS` | `512` | Max response tokens |
+| `CONTEXT_TOKEN_BUDGET` | `4000` | Maximum estimated input tokens for reply context |
 | `LLM_TEMPERATURE` | `0.7` | Sampling temperature (0.0–2.0); lower = more focused, less rambling |
 | `AI_REPLIES_ENABLED` | `false` | Enable AI replies after greeting |
 | `MINI_APP_URL` | empty | HTTPS Mini App URL |

@@ -5,7 +5,11 @@ from __future__ import annotations
 import pytest
 
 from app.database.db import Database
-from app.services.examples_service import MAX_EXAMPLES, ContactExamplesService
+from app.services.examples_service import (
+    MAX_EXAMPLES,
+    PROMPT_EXAMPLES_PER_KIND,
+    ContactExamplesService,
+)
 
 
 def _make_service(tmp_path) -> tuple[ContactExamplesService, Database]:
@@ -109,6 +113,20 @@ def test_examples_block_disabled(tmp_path) -> None:
         svc.add_example(1, "hi", "hey")
         svc.enabled = False
         assert svc.examples_block(1, "ru") == ""
+
+
+def test_examples_block_selects_the_closest_examples_for_a_query(tmp_path) -> None:
+    svc, db = _make_service(tmp_path)
+    with db:
+        for message in ["погода минск", "погода брест", "фильм", "работа"]:
+            svc.add_example(1, message, f"ответ {message}")
+
+        block = svc.examples_block(1, "ru", query="какая погода в минске?")
+
+        assert "ответ погода минск" in block
+        assert "ответ погода брест" in block
+        assert "ответ фильм" not in block
+        assert block.count("Контакт:") == PROMPT_EXAMPLES_PER_KIND - 1
 
 
 # ── Negative examples (kind='negative') ────────────────────────────────────────

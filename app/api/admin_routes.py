@@ -411,7 +411,7 @@ def create_admin_router(
         """Dry-run a persona: generate a reply without recording it to memory.
 
         If system_prompt_override is provided it replaces the resolved persona prompt.
-        Returns the reply, the full assembled_messages list, and latency_ms.
+        Returns the reply, assembled messages, latency, and context-block provenance.
         """
         if not reply_service.enabled:
             raise HTTPException(

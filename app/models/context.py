@@ -24,6 +24,17 @@ class ContextBlock:
     sensitivity: str
     estimated_tokens: int
     placement: str = "system"
+    conflict_key: str | None = None
+    required: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class ContextBlockDecision:
+    """Explain whether a block entered the prompt and why."""
+
+    block: ContextBlock
+    included: bool
+    reason: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,3 +45,6 @@ class CompiledContext:
     blocks: tuple[ContextBlock, ...]
     estimated_tokens: int
     live_messages: tuple[dict[str, str], ...] = ()
+    reply_context: str | None = None
+    decisions: tuple[ContextBlockDecision, ...] = ()
+    considered_tokens: int = 0

@@ -102,6 +102,7 @@ def create_api_app(config: Config, database: Database, processing_status_service
         weather_service=weather_service,
         facts_service=facts_service,
         examples_service=examples_service,
+        context_token_budget=config.context_token_budget,
         enabled=config.ai_replies_enabled,
     )
 

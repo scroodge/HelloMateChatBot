@@ -46,6 +46,7 @@ class Config:
     greeting_hour: int
     conversation_starters_path: Path
     memory_window_size: int
+    context_token_budget: int
     llm_provider: str
     llm_base_url: str
     llm_model: str
@@ -117,6 +118,9 @@ class Config:
             os.getenv("CONVERSATION_STARTERS", "data/starters.json")
         ).expanduser()
         memory_window_size = int(os.getenv("MEMORY_WINDOW_SIZE", "20"))
+        context_token_budget = int(os.getenv("CONTEXT_TOKEN_BUDGET", "4000"))
+        if context_token_budget < 256:
+            raise ConfigError("CONTEXT_TOKEN_BUDGET must be at least 256.")
 
         llm_provider = os.getenv("LLM_PROVIDER", "ollama").strip().lower() or "ollama"
         llm_base_url = os.getenv("LLM_BASE_URL", "http://localhost:11434").strip()
@@ -193,6 +197,7 @@ class Config:
             greeting_hour=greeting_hour,
             conversation_starters_path=conversation_starters_path,
             memory_window_size=memory_window_size,
+            context_token_budget=context_token_budget,
             llm_provider=llm_provider,
             llm_base_url=llm_base_url,
             llm_model=llm_model,

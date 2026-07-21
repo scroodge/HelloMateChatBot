@@ -103,6 +103,9 @@ def test_extraction_prompt_rejects_role_leakage_and_chat_noise() -> None:
         multi_keys={"family", "interests"},
     )
 
+    assert "верни пустой объект {}" in prompt[0]["content"]
+    assert "{{}}" not in prompt[0]["content"]
+
     system = prompt[0]["content"]
     user = prompt[1]["content"]
     assert "никогда не приписывай Контакту факты из сообщений Я" in system

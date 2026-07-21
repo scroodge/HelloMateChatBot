@@ -190,6 +190,7 @@ def build_application(config: Config, database: Database, processing_status_serv
         facts_service=facts_service,
         recall_service=recall_service,
         examples_service=examples_service,
+        context_token_budget=config.context_token_budget,
         enabled=config.ai_replies_enabled,
     )
 

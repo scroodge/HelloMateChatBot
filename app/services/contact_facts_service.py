@@ -219,7 +219,7 @@ def _build_extraction_messages(
             "Уже известные факты ниже даны только как справка: не повторяй их без нового "
             "явного подтверждения в последних сообщениях. Возвращай только новые или прямо "
             "исправленные факты. Не придумывай. Значения — короткие строки на русском. "
-            "Если надёжных новых фактов нет — верни пустой объект {{}}."
+            "Если надёжных новых фактов нет — верни пустой объект {}."
         )
         intro_existing = "Уже известные факты:" if existing_facts else ""
         intro_chat = "Последние сообщения (Я / Контакт):"
@@ -241,7 +241,7 @@ def _build_extraction_messages(
             "useful durable information, never a message recap. Existing facts below are "
             "reference only: do not repeat them without fresh explicit confirmation in the "
             "recent messages. Return only new or explicitly corrected facts. Do not invent. "
-            "Use short string values. If there are no reliable new facts, return {{}}."
+            "Use short string values. If there are no reliable new facts, return {}."
         )
         intro_existing = "Already known facts:" if existing_facts else ""
         intro_chat = "Recent messages (Me / Contact):"

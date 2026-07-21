@@ -12,6 +12,7 @@ avoid the tone and phrasing in those pairs.
 from __future__ import annotations
 
 import logging
+import re
 
 from app.database.repositories.examples import ContactExamplesRepository
 from app.models.examples import ContactExample
@@ -24,6 +25,7 @@ MAX_EXAMPLES = 10
 
 # Truncate each side so a single pasted wall of text can't dominate the prompt.
 MAX_FIELD_CHARS = 600
+PROMPT_EXAMPLES_PER_KIND = 3
 
 _VALID_KINDS = {"positive", "negative"}
 
@@ -61,13 +63,19 @@ class ContactExamplesService:
         """Return (total examples, number of contacts with examples)."""
         return self.repository.global_stats()
 
-    def examples_block(self, user_id: int, language: str) -> str:
+    def examples_block(self, user_id: int, language: str, *, query: str | None = None) -> str:
         """Return a system-prompt block of few-shot examples, or '' if none."""
         if not self.enabled:
             return ""
         all_examples = self.repository.list_examples(user_id)
-        positives = [e for e in all_examples if e.kind == "positive"][:MAX_EXAMPLES]
-        negatives = [e for e in all_examples if e.kind == "negative"][:MAX_EXAMPLES]
+        positives = [e for e in all_examples if e.kind == "positive"]
+        negatives = [e for e in all_examples if e.kind == "negative"]
+        if query:
+            positives = self._rank_for_query(positives, query)[:PROMPT_EXAMPLES_PER_KIND]
+            negatives = self._rank_for_query(negatives, query)[:PROMPT_EXAMPLES_PER_KIND]
+        else:
+            positives = positives[:MAX_EXAMPLES]
+            negatives = negatives[:MAX_EXAMPLES]
         if not positives and not negatives:
             return ""
 
@@ -109,3 +117,18 @@ class ContactExamplesService:
                 )
 
         return "".join(parts)
+
+    @staticmethod
+    def _rank_for_query(examples: list[ContactExample], query: str) -> list[ContactExample]:
+        """Rank curated examples by lexical overlap, keeping stable ties deterministic."""
+
+        query_terms = set(re.findall(r"\w+", query.casefold(), re.UNICODE))
+
+        def score(example: ContactExample) -> tuple[int, int]:
+            example_terms = set(re.findall(r"\w+", example.contact_message.casefold(), re.UNICODE))
+            return len(query_terms & example_terms), example.id or 0
+
+        ranked = sorted(examples, key=score, reverse=True)
+        if ranked and score(ranked[0])[0] > 0:
+            return [example for example in ranked if score(example)[0] > 0]
+        return examples

@@ -196,3 +196,37 @@ async def test_compile_context_records_typed_sources_without_changing_prompt_ord
     ]
     assert compiled.system_prompt.startswith("Персона Последнее настроение: 4/5.")
     assert compiled.system_prompt.endswith("не раскрывай лишних личных подробностей.")
+
+
+@pytest.mark.asyncio
+async def test_context_budget_drops_live_window_and_quote_before_required_policy() -> None:
+    settings_service = MagicMock()
+    settings_service.resolve_persona_prompt.return_value = "Persona"
+    settings_service.get_openness.return_value = "neutral"
+    settings_service.get_user_settings.return_value = MagicMock(style_learning_enabled=False)
+    profile_service = MagicMock()
+    profile_service.get_or_create_profile.return_value = MagicMock(display_name="Way")
+    memory_service = MagicMock()
+    memory_service.get_summary.return_value = None
+    memory_service.as_chat_messages.return_value = [
+        {"role": "assistant", "content": "Earlier reply"}
+    ]
+    mood_service = MagicMock()
+    mood_service.latest_mood.return_value = None
+    service = ReplyService(
+        llm_service=AsyncMock(),
+        memory_service=memory_service,
+        mood_service=mood_service,
+        profile_service=profile_service,
+        settings_service=settings_service,
+        context_token_budget=1,
+        enabled=True,
+    )
+
+    messages = await service._build_messages(
+        1, "New message", "en", reply_context="Quoted message"
+    )
+
+    assert [message["role"] for message in messages] == ["system", "user"]
+    assert messages[-1]["content"] == "New message"
+    assert "Persona" in messages[0]["content"]
