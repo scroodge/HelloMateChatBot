@@ -18,7 +18,7 @@ import re
 
 from app.database.repositories.assistant import AssistantProfilesRepository
 from app.models.assistant import AssistantProfile
-from app.services.llm import LLMService
+from app.services.llm import LLMService, complete_text
 from app.services.memory_service import MemoryService
 from app.services.reply_service import _sanitize_reply
 from app.services.settings_service import SettingsService
@@ -75,9 +75,7 @@ class AssistantService:
         name = name.strip()
         persona = persona.strip()
         if not _NAME_RE.match(name):
-            raise ValueError(
-                "Имя профиля: буквы/цифры/пробел/_/-, до 30 символов."
-            )
+            raise ValueError("Имя профиля: буквы/цифры/пробел/_/-, до 30 символов.")
         if not persona:
             raise ValueError("Опиши персону (системный промпт).")
         if len(persona) > MAX_PERSONA_CHARS:
@@ -157,7 +155,11 @@ class AssistantService:
             {"role": "user", "content": user_message},
         ]
         try:
-            reply = _sanitize_reply(await self.llm_service.complete(messages))
+            reply = _sanitize_reply(
+                await complete_text(
+                    self.llm_service, messages, purpose="assistant", contact_user_id=owner_id
+                )
+            )
         except Exception:
             logger.exception("Assistant reply failed for owner %s", owner_id)
             return None

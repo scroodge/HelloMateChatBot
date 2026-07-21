@@ -17,6 +17,7 @@ from pydantic import BaseModel
 
 from app.api.auth import validate_init_data
 from app.database.repositories.events import EventRepository
+from app.database.repositories.feedback import FeedbackRepositoryImpl
 from app.services.contact_facts_service import ContactFactsService
 from app.services.examples_service import ContactExamplesService
 from app.services.fact_categories_service import FactCategoriesService
@@ -109,6 +110,16 @@ class SuggestionSaveRequest(BaseModel):
     contact_message: str | None = None
     reply_text: str | None = None
     kind: str = "positive"  # "positive" | "negative"
+    reason: str | None = None
+
+
+class SuggestionAcceptRequest(BaseModel):
+    reply_text: str | None = None
+    reason: str | None = None
+
+
+class SuggestionDismissRequest(BaseModel):
+    reason: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -133,6 +144,7 @@ def create_admin_router(
     examples_service: ContactExamplesService | None = None,
     suggestions_service: SuggestionsService | None = None,
     summary_service: SummaryService | None = None,
+    feedback_repository: FeedbackRepositoryImpl | None = None,
     *,
     mini_app_dev: bool = False,
     dev_user_id: int | None = None,
@@ -690,6 +702,7 @@ def create_admin_router(
         profiles = {p.user_id: p for p in profile_service.list_profiles()}
         out = []
         for s in suggestions_service.list_pending():
+            suggestions_service.viewed(s.id)
             profile = profiles.get(s.user_id)
             out.append(
                 {
@@ -704,11 +717,36 @@ def create_admin_router(
         return out
 
     @router.post("/suggestions/{suggestion_id}/dismiss")
-    async def dismiss_suggestion(suggestion_id: int, caller_id: int = AdminUser) -> dict[str, Any]:
+    async def dismiss_suggestion(
+        suggestion_id: int,
+        request: SuggestionDismissRequest | None = None,
+        caller_id: int = AdminUser,
+    ) -> dict[str, Any]:
         """Mark a suggestion as dismissed (removes it from the inbox)."""
         if suggestions_service is None:
             raise HTTPException(status_code=503, detail="Suggestions service not enabled")
-        suggestions_service.dismiss(suggestion_id)
+        suggestions_service.dismiss(suggestion_id, reason=request.reason if request else None)
+        return {"pending": suggestions_service.count_pending()}
+
+    @router.post("/suggestions/{suggestion_id}/copy")
+    async def copy_suggestion(suggestion_id: int, caller_id: int = AdminUser) -> dict[str, bool]:
+        if suggestions_service is None or suggestions_service.get(suggestion_id) is None:
+            raise HTTPException(status_code=404, detail="Suggestion not found")
+        suggestions_service.copied(suggestion_id)
+        return {"recorded": True}
+
+    @router.post("/suggestions/{suggestion_id}/accept")
+    async def accept_suggestion(
+        suggestion_id: int, request: SuggestionAcceptRequest, caller_id: int = AdminUser
+    ) -> dict[str, Any]:
+        if suggestions_service is None:
+            raise HTTPException(status_code=503, detail="Suggestions service not enabled")
+        suggestion = suggestions_service.get(suggestion_id)
+        if suggestion is None:
+            raise HTTPException(status_code=404, detail="Suggestion not found")
+        suggestions_service.accept(
+            suggestion_id, request.reply_text or suggestion.draft_text, request.reason
+        )
         return {"pending": suggestions_service.count_pending()}
 
     @router.post("/suggestions/{suggestion_id}/save")
@@ -729,8 +767,32 @@ def create_admin_router(
             )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
-        suggestions_service.mark_saved(suggestion_id)
+        suggestions_service.mark_saved(
+            suggestion_id, kind=request.kind, final_text=reply_text, reason=request.reason
+        )
         return {"pending": suggestions_service.count_pending()}
+
+    @router.get("/analytics/feedback")
+    async def feedback_analytics(
+        user_id: int | None = Query(default=None),
+        days: int = Query(default=30, ge=1, le=365),
+        caller_id: int = AdminUser,
+    ) -> dict[str, Any]:
+        if feedback_repository is None:
+            return {
+                "created": 0,
+                "accepted_as_is": 0,
+                "accepted_edited": 0,
+                "dismissed": 0,
+                "owner_replied": 0,
+                "median_decision_seconds": None,
+                "providers": [],
+            }
+        from datetime import datetime, timedelta
+
+        return feedback_repository.analytics(
+            user_id=user_id, since=datetime.now().astimezone() - timedelta(days=days)
+        )
 
     # -----------------------------------------------------------------------
     # Custom fact categories (global, owner-defined)

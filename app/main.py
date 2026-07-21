@@ -110,7 +110,7 @@ def build_application(config: Config, database: Database):
     mood_service = MoodService(database.moods)
     memory_service = MemoryService(database.memory, config.memory_window_size)
     llm_provider = build_llm_provider(config)
-    llm_service = LLMService(llm_provider)
+    llm_service = LLMService(llm_provider, database.feedback)
     embedding_service = EmbeddingService(
         base_url=config.llm_base_url,
         model=config.llm_embedding_model,
@@ -151,7 +151,7 @@ def build_application(config: Config, database: Database):
         categories_service=fact_categories_service,
     )
     examples_service = ContactExamplesService(database.examples)
-    suggestions_service = SuggestionsService(database.suggestions)
+    suggestions_service = SuggestionsService(database.suggestions, database.feedback)
     assistant_service = AssistantService(
         repository=database.assistant_profiles,
         memory_service=memory_service,

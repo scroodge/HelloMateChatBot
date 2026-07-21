@@ -426,6 +426,7 @@
     <div class="card" style="font-size:13px;color:var(--hint)">
       Черновики ответов из режима «подсказки». Поправь, скопируй и отправь сам, или сохрани как эталон.
     </div>
+    <div id="suggestions-analytics" class="card" style="display:none"></div>
     <div id="suggestions-list"><div class="spinner">Загрузка...</div></div>
   </div>
 
@@ -1487,9 +1488,17 @@ function updateSuggestBadge(n) {
 
 async function loadSuggestions() {
   const el = document.getElementById('suggestions-list');
+  const analyticsEl = document.getElementById('suggestions-analytics');
   el.innerHTML = '<div class="spinner">Загрузка...</div>';
   try {
-    const items = await get('/admin/suggestions');
+    const [items, analytics] = await Promise.all([
+      get('/admin/suggestions'), get('/admin/analytics/feedback')
+    ]);
+    analyticsEl.style.display = '';
+    analyticsEl.innerHTML = `<div class="card-title">Качество подсказок, 30 дней</div>
+      <div class="contact-meta">Создано: ${analytics.created} · Без правок: ${analytics.accepted_as_is} · С правками: ${analytics.accepted_edited} · Отклонено: ${analytics.dismissed}</div>
+      <div class="contact-meta">Ответил сам: ${analytics.owner_replied} · Медиана решения: ${analytics.median_decision_seconds == null ? '—' : analytics.median_decision_seconds + ' с'}</div>
+      ${(analytics.providers || []).map(p => `<div class="contact-meta">${escHtml(p.provider)} / ${escHtml(p.model)}: ${p.latency_ms} мс, ошибок: ${p.errors}</div>`).join('')}`;
     updateSuggestBadge(items.length);
     if (!items.length) {
       el.innerHTML = '<div class="empty">Нет новых подсказок — всё разобрано 🎉</div>';
@@ -1505,8 +1514,16 @@ async function loadSuggestions() {
         <div class="msg-bubble msg-assistant" style="margin:6px 0">${escHtml(s.contact_message)}</div>
         <div class="contact-meta">Черновик (поправь при необходимости):</div>
         <textarea id="sugg-text-${s.id}" rows="3" style="margin:4px 0">${escHtml(s.draft_text)}</textarea>
+        <select id="sugg-reason-${s.id}" style="margin:4px 0">
+          <option value="">Причина, если нужно указать</option>
+          <option value="not_my_style">Не мой стиль</option><option value="misunderstood">Неправильно понял</option>
+          <option value="fabricated_fact">Выдумал факт</option><option value="wrong_memory">Неверно использовал память</option>
+          <option value="too_open">Слишком открыто</option><option value="too_long">Слишком длинно</option>
+          <option value="unsafe">Небезопасно отправлять</option><option value="other">Другое</option>
+        </select>
         <div class="row" style="flex-wrap:wrap;gap:6px">
           <button class="btn btn-sm" onclick="copySuggestion(${s.id})" style="width:auto">📋 Копировать</button>
+          <button class="btn btn-sm" onclick="acceptSuggestion(${s.id})" style="width:auto">✓ Принять</button>
           <button class="btn btn-sm" onclick="saveSuggestion(${s.id},'positive')" style="width:auto">🎯 В эталоны</button>
           <button class="btn btn-sm btn-secondary" onclick="saveSuggestion(${s.id},'negative')" style="width:auto">👎 Антипример</button>
           <button class="btn btn-sm btn-secondary" onclick="dismissSuggestion(${s.id})" style="width:auto">🗑 Скрыть</button>
@@ -1514,26 +1531,43 @@ async function loadSuggestions() {
       </div>`;
     }).join('');
   } catch(e) {
+    analyticsEl.style.display = 'none';
     el.innerHTML = `<div class="error">Ошибка: ${e.message}</div>`;
   }
 }
 
-function copySuggestion(id) {
+async function copySuggestion(id) {
   const text = document.getElementById('sugg-text-' + id).value;
   const done = () => toast('Скопировано');
-  if (navigator.clipboard?.writeText) {
-    navigator.clipboard.writeText(text).then(done).catch(() => tg.showAlert?.('Не удалось скопировать'));
-  } else {
-    const ta = document.getElementById('sugg-text-' + id);
-    ta.select(); document.execCommand('copy'); done();
+  try {
+    await post(`/admin/suggestions/${id}/copy`);
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text); done();
+    } else {
+      const ta = document.getElementById('sugg-text-' + id);
+      ta.select(); document.execCommand('copy'); done();
+    }
+  } catch (_) {
+    tg.showAlert?.('Не удалось скопировать');
   }
+}
+
+async function acceptSuggestion(id) {
+  const reply_text = document.getElementById('sugg-text-' + id).value.trim();
+  const reason = document.getElementById('sugg-reason-' + id).value || null;
+  if (!reply_text) { tg.showAlert?.('Пустой ответ'); return; }
+  try {
+    const res = await post(`/admin/suggestions/${id}/accept`, { reply_text, reason });
+    removeSuggestionCard(id, res.pending); toast('Принято');
+  } catch(e) { tg.showAlert?.('Ошибка: ' + e.message); }
 }
 
 async function saveSuggestion(id, kind = 'positive') {
   const reply_text = document.getElementById('sugg-text-' + id).value.trim();
+  const reason = document.getElementById('sugg-reason-' + id).value || null;
   if (!reply_text) { tg.showAlert?.('Пустой ответ'); return; }
   try {
-    const res = await post(`/admin/suggestions/${id}/save`, { reply_text, kind });
+    const res = await post(`/admin/suggestions/${id}/save`, { reply_text, kind, reason });
     removeSuggestionCard(id, res.pending);
     toast(kind === 'negative' ? 'Добавлен антипример' : 'Сохранено в эталоны');
   } catch(e) {
@@ -1543,7 +1577,8 @@ async function saveSuggestion(id, kind = 'positive') {
 
 async function dismissSuggestion(id) {
   try {
-    const res = await post(`/admin/suggestions/${id}/dismiss`);
+    const reason = document.getElementById('sugg-reason-' + id).value || null;
+    const res = await post(`/admin/suggestions/${id}/dismiss`, { reason });
     removeSuggestionCard(id, res.pending);
   } catch(e) {
     tg.showAlert?.('Ошибка: ' + e.message);

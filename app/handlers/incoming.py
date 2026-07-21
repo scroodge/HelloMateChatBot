@@ -168,6 +168,8 @@ async def _process_incoming_text(
         style_service.schedule_refresh(contact_user_id)
 
     if sender_is_owner:
+        if suggestions_service is not None and message_text:
+            suggestions_service.owner_replied(contact_user_id, message_text)
         return
 
     if not isinstance(greeting_service, GreetingService):

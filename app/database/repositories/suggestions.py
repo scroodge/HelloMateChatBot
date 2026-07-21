@@ -15,10 +15,16 @@ if TYPE_CHECKING:
 
 
 class SuggestionsRepository:
-    def add(self, user_id: int, contact_message: str, draft_text: str) -> Suggestion:
+    def add(
+        self,
+        user_id: int,
+        contact_message: str,
+        draft_text: str,
+        generation_trace_id: str | None = None,
+    ) -> Suggestion:
         raise NotImplementedError
 
-    def supersede_pending(self, user_id: int) -> None:
+    def supersede_pending(self, user_id: int) -> list[int]:
         raise NotImplementedError
 
     def list_by_status(self, status: str, limit: int = 100) -> list[Suggestion]:
@@ -47,9 +53,16 @@ class SuggestionsRepositoryImpl(SuggestionsRepository):
             draft_text=row.draft_text,
             status=row.status,
             created_at=datetime.fromisoformat(row.created_at),
+            generation_trace_id=getattr(row, "generation_trace_id", None),
         )
 
-    def add(self, user_id: int, contact_message: str, draft_text: str) -> Suggestion:
+    def add(
+        self,
+        user_id: int,
+        contact_message: str,
+        draft_text: str,
+        generation_trace_id: str | None = None,
+    ) -> Suggestion:
         now = datetime.now().astimezone()
         with self._db.engine.begin() as conn:
             result = conn.execute(
@@ -58,6 +71,7 @@ class SuggestionsRepositoryImpl(SuggestionsRepository):
                     contact_message=contact_message,
                     draft_text=draft_text,
                     status="pending",
+                    generation_trace_id=generation_trace_id,
                     created_at=now.isoformat(),
                 )
             )
@@ -69,15 +83,25 @@ class SuggestionsRepositoryImpl(SuggestionsRepository):
             draft_text=draft_text,
             status="pending",
             created_at=now,
+            generation_trace_id=generation_trace_id,
         )
 
-    def supersede_pending(self, user_id: int) -> None:
+    def supersede_pending(self, user_id: int) -> list[int]:
         with self._db.engine.begin() as conn:
+            ids = [
+                int(row.id)
+                for row in conn.execute(
+                    select(suggestions.c.id).where(
+                        suggestions.c.user_id == user_id, suggestions.c.status == "pending"
+                    )
+                )
+            ]
             conn.execute(
                 update(suggestions)
                 .where(suggestions.c.user_id == user_id, suggestions.c.status == "pending")
                 .values(status="superseded")
             )
+        return ids
 
     def list_by_status(self, status: str, limit: int = 100) -> list[Suggestion]:
         with self._db.engine.connect() as conn:

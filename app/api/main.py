@@ -56,7 +56,7 @@ def create_api_app(config: Config, database: Database) -> FastAPI:
     from app.services.rag_service import RAGService
 
     llm_provider = build_llm_provider(config)
-    llm_service = LLMService(llm_provider)
+    llm_service = LLMService(llm_provider, database.feedback)
     embedding_service = EmbeddingService(
         base_url=config.llm_base_url,
         model=config.llm_embedding_model,
@@ -89,7 +89,7 @@ def create_api_app(config: Config, database: Database) -> FastAPI:
         enabled=config.summary_enabled and config.ai_replies_enabled,
     )
     examples_service = ContactExamplesService(database.examples)
-    suggestions_service = SuggestionsService(database.suggestions)
+    suggestions_service = SuggestionsService(database.suggestions, database.feedback)
     reply_service = ReplyService(
         llm_service=llm_service,
         memory_service=memory_service,
@@ -135,6 +135,7 @@ def create_api_app(config: Config, database: Database) -> FastAPI:
             examples_service=examples_service,
             suggestions_service=suggestions_service,
             summary_service=summary_service,
+            feedback_repository=database.feedback,
             mini_app_dev=config.mini_app_dev,
             dev_user_id=dev_user_id,
         ),

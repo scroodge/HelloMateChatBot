@@ -16,3 +16,4 @@ class Suggestion:
     status: str
     created_at: datetime
     id: int | None = None
+    generation_trace_id: str | None = None

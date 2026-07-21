@@ -13,7 +13,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from app.services.llm import LLMService
+from app.services.llm import LLMService, complete_text
 from app.services.memory_service import MemoryService
 from app.services.settings_service import SettingsService
 
@@ -128,7 +128,11 @@ class StyleService:
                 language,
                 self.max_chars,
             )
-            profile = (await self.llm_service.complete(prompt)).strip()
+            profile = (
+                await complete_text(
+                    self.llm_service, prompt, purpose="style", contact_user_id=user_id
+                )
+            ).strip()
             if not profile:
                 return
             self.memory_service.set_style_profile(

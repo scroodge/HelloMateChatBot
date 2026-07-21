@@ -11,6 +11,7 @@ from __future__ import annotations
 from sqlalchemy import (
     Boolean,
     Column,
+    Float,
     Index,
     Integer,
     LargeBinary,
@@ -198,9 +199,59 @@ suggestions = Table(
     Column("draft_text", Text, nullable=False),
     # "pending" | "saved" | "dismissed" | "superseded"
     Column("status", Text, nullable=False, default="pending"),
+    Column("generation_trace_id", Text),
     Column("created_at", Text, nullable=False),
     Index("idx_suggestions_status_created", "status", "created_at"),
     Index("idx_suggestions_user", "user_id"),
+)
+
+generation_runs = Table(
+    "generation_runs",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("trace_id", Text, nullable=False, unique=True),
+    Column("user_id", Integer),
+    Column("suggestion_id", Integer),
+    Column("purpose", Text, nullable=False),
+    Column("provider", Text, nullable=False),
+    Column("model", Text, nullable=False),
+    Column("prompt_version", Text, nullable=False),
+    Column("context_policy_version", Text, nullable=False),
+    Column("response_id", Text),
+    Column("input_tokens", Integer),
+    Column("output_tokens", Integer),
+    Column("cached_tokens", Integer),
+    Column("latency_ms", Integer, nullable=False),
+    Column("finish_reason", Text),
+    Column("error_code", Text),
+    Column("fallback_chain", Text),
+    Column("created_at", Text, nullable=False),
+    Index("idx_generation_runs_user_created", "user_id", "created_at"),
+)
+
+feedback_events = Table(
+    "feedback_events",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("suggestion_id", Integer, nullable=False),
+    Column("event_type", Text, nullable=False),
+    Column("reason", Text),
+    Column("created_at", Text, nullable=False),
+    Index("idx_feedback_events_suggestion", "suggestion_id", "created_at"),
+)
+
+suggestion_outcomes = Table(
+    "suggestion_outcomes",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("suggestion_id", Integer, nullable=False),
+    Column("final_text", Text, nullable=False),
+    Column("character_edit_distance", Integer, nullable=False),
+    Column("token_edit_distance", Integer, nullable=False),
+    Column("semantic_similarity", Float),
+    Column("decision_seconds", Integer, nullable=False),
+    Column("created_at", Text, nullable=False),
+    Index("idx_suggestion_outcomes_suggestion", "suggestion_id"),
 )
 
 contact_examples = Table(

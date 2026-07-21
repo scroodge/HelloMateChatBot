@@ -12,7 +12,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from app.services.llm import LLMService
+from app.services.llm import LLMService, complete_text
 from app.services.memory_service import MemoryService
 from app.services.settings_service import SettingsService
 
@@ -170,7 +170,11 @@ class SummaryService:
                 language,
                 self.max_chars,
             )
-            summary = (await self.llm_service.complete(prompt)).strip()
+            summary = (
+                await complete_text(
+                    self.llm_service, prompt, purpose="summary", contact_user_id=user_id
+                )
+            ).strip()
             if not summary:
                 return
             self.memory_service.set_summary(
@@ -218,7 +222,11 @@ class SummaryService:
                     language,
                     self.max_chars,
                 )
-                rebuilt = (await self.llm_service.complete(prompt)).strip()
+                rebuilt = (
+                    await complete_text(
+                        self.llm_service, prompt, purpose="summary", contact_user_id=user_id
+                    )
+                ).strip()
                 if not rebuilt:
                     raise RuntimeError("LLM returned an empty summary")
                 summary = _truncate_summary(rebuilt, self.max_chars)

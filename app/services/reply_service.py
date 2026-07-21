@@ -6,7 +6,7 @@ import logging
 import re
 
 from app.i18n import language_name, translate
-from app.services.llm import LLMService
+from app.services.llm import LLMService, complete_text
 from app.services.memory_service import MemoryService
 from app.services.mood_service import MoodService
 from app.services.profile_service import ProfileService
@@ -204,7 +204,9 @@ class ReplyService:
             messages = await self._build_messages(
                 user_id, user_message, language, reply_context=reply_context
             )
-            reply = await self.llm_service.complete(messages)
+            reply = await complete_text(
+                self.llm_service, messages, purpose="reply", contact_user_id=user_id
+            )
             if _contains_cjk(reply):
                 reply = await self._rewrite_without_cjk(messages, reply, language)
             reply = _sanitize_reply(reply)
@@ -232,7 +234,9 @@ class ReplyService:
             messages = await self._build_messages(
                 user_id, user_message, language, reply_context=reply_context
             )
-            reply = await self.llm_service.complete(messages)
+            reply = await complete_text(
+                self.llm_service, messages, purpose="draft", contact_user_id=user_id
+            )
             if _contains_cjk(reply):
                 reply = await self._rewrite_without_cjk(messages, reply, language)
             return _sanitize_reply(reply)
@@ -260,7 +264,11 @@ class ReplyService:
             messages[0] = {"role": "system", "content": system_prompt_override}
         t0 = time.monotonic()
         try:
-            reply = _sanitize_reply(await self.llm_service.complete(messages))
+            reply = _sanitize_reply(
+                await complete_text(
+                    self.llm_service, messages, purpose="preview", contact_user_id=user_id
+                )
+            )
         except Exception:
             logger.exception("Preview reply failed for user %s", user_id)
             reply = translate("ai_unavailable", language)
@@ -394,7 +402,9 @@ class ReplyService:
             {"role": "user", "content": rewrite_request},
         ]
         try:
-            rewritten = await self.llm_service.complete(retry_messages)
+            rewritten = await complete_text(
+                self.llm_service, retry_messages, purpose="reply", contact_user_id=None
+            )
             if not _contains_cjk(rewritten):
                 return rewritten
             logger.warning(

@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import httpx
 
+from app.models.generation import GenerationRequest, GenerationResult
+
 
 class OpenAIProvider:
     """Call an OpenAI-compatible chat completions API."""
 
     _STOP = ["\nКонтакт:", "\nContact:", "\nОтвет:", "\nReply:"]
+    provider_name = "openai"
 
     def __init__(
         self, base_url: str, model: str, api_key: str, max_tokens: int, temperature: float = 0.7
@@ -19,13 +22,16 @@ class OpenAIProvider:
         self.max_tokens = max_tokens
         self.temperature = temperature
 
-    async def complete(self, messages: list[dict[str, str]]) -> str:
+    async def generate(self, request: GenerationRequest) -> GenerationResult:
+        from time import monotonic
+
+        started = monotonic()
         if not self.api_key:
             raise RuntimeError("LLM_API_KEY is required for the OpenAI provider.")
 
         payload = {
             "model": self.model,
-            "messages": messages,
+            "messages": request.messages,
             "max_tokens": self.max_tokens,
             "temperature": self.temperature,
             "stop": self._STOP,
@@ -47,7 +53,23 @@ class OpenAIProvider:
         content = message.get("content")
         if not isinstance(content, str) or not content.strip():
             raise RuntimeError("OpenAI-compatible API returned an empty response.")
-        return content.strip()
+        usage = data.get("usage") or {}
+        choice = choices[0]
+        details = usage.get("prompt_tokens_details") or {}
+        return GenerationResult(
+            text=content.strip(),
+            provider=self.provider_name,
+            model=data.get("model", self.model),
+            response_id=data.get("id"),
+            input_tokens=usage.get("prompt_tokens"),
+            output_tokens=usage.get("completion_tokens"),
+            cached_tokens=details.get("cached_tokens"),
+            finish_reason=choice.get("finish_reason"),
+            latency_ms=round((monotonic() - started) * 1000),
+        )
+
+    async def complete(self, messages: list[dict[str, str]]) -> str:
+        return (await self.generate(GenerationRequest(messages, "reply", None, "v1", "v1"))).text
 
     async def transcribe(self, audio_bytes: bytes, model: str = "whisper-1") -> str:
         if not self.api_key:

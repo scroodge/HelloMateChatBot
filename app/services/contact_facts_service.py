@@ -17,7 +17,7 @@ import re
 
 from app.database.repositories.facts import ContactFactsRepository
 from app.models.facts import ContactFact
-from app.services.llm import LLMService
+from app.services.llm import LLMService, complete_text
 from app.services.memory_service import MemoryService
 from app.services.settings_service import SettingsService
 
@@ -457,7 +457,9 @@ class ContactFactsService:
             extra_keys=extra_categories,
             multi_keys=multi_keys,
         )
-        raw = (await self.llm_service.complete(prompt)).strip()
+        raw = (
+            await complete_text(self.llm_service, prompt, purpose="facts", contact_user_id=user_id)
+        ).strip()
         new_facts = _parse_facts_json(raw, allowed_keys)
 
         # Merge: set_fact overwrites single keys and appends+dedups multi keys.
@@ -510,7 +512,11 @@ class ContactFactsService:
                     extra_keys=extra_categories,
                     multi_keys=multi_keys,
                 )
-                raw = (await self.llm_service.complete(prompt)).strip()
+                raw = (
+                    await complete_text(
+                        self.llm_service, prompt, purpose="facts", contact_user_id=user_id
+                    )
+                ).strip()
                 for key, value in _parse_facts_json(raw, allowed_keys).items():
                     self.set_fact(user_id, key, value)
                 offset += len(messages)
