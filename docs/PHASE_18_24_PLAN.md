@@ -1,6 +1,6 @@
 # HelloMate — план развития Phase 18–24
 
-_Статус: Phase 18–20 реализованы и deployed; Phase 21A–21C реализованы и verified locally; Phase 21C deployment pending; Phase 21D–24 proposal · Последнее обновление: 2026-07-21_
+_Статус: Phase 18–21C реализованы и deployed; Phase 21D candidate lab реализован locally, credential-registry deployment pending; Phase 22A реализован locally; Phase 22B–24 proposal · Последнее обновление: 2026-07-21_
 
 ## 1. Цель
 
@@ -503,6 +503,21 @@ global owner style
 - существует фиксированный holdout;
 - можно мгновенно вернуться к baseline.
 
+### Фактический результат 21D (2026-07-21)
+
+- В Mini App добавлена вкладка «Модели»: владелец добавляет provider/model/base URL
+  кандидата и запускает regression evaluation без изменения production routing.
+- Eval использует только серверные credentials. Для платных провайдеров добавлен
+  local-only registry `EVAL_PROVIDER_KEYS_JSON`; UI выбирает лишь credential ID,
+  никогда не получает и не сохраняет API key.
+- Первый live run `Qwen 14B` (`qwen2.5:14b`) завершился с `failed`, pass rate 46%,
+  поэтому кандидат не может быть использован для shadow/canary routing. Второй
+  идентичный кандидат был создан до добавления duplicate guard; теперь одинаковые
+  provider/model/base URL/credential ID отклоняются.
+- До следующего шага нужно: deploy credential-registry changes, добавить server-side
+  key для платного provider, прогнать кандидата, который проходит hard safety gate,
+  и только затем реализовывать Suggest-only shadow selection.
+
 ### Definition of Done
 
 - владелец видит и подтверждает learning proposals;
@@ -544,6 +559,17 @@ Jobs: summary, facts, style, embeddings, memory rebuild, offline eval export.
 - health/queue metrics.
 
 Celery/Redis не добавляются без доказанной необходимости.
+
+### Фактический результат 22A (2026-07-21)
+
+- Добавлены `background_jobs` и migration `667788eeff00`: тип, JSON payload,
+  idempotency key, статус, счётчик попыток, планируемое время запуска, lease,
+  диагностическая ошибка и lifecycle timestamps.
+- Repository поддерживает idempotent enqueue, атомарный lease, reclaim задачи с
+  истекшим lease после restart, completion, retry scheduling и dead-letter
+  transition. Payload предназначен для ссылок/ID, а не для копирования текста
+  переписки.
+- Верификация: repository tests и offline Eval Lab regression gate прошли.
 
 ### 22C. Provider resilience
 

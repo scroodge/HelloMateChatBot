@@ -16,6 +16,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 
 from app.database.repositories.assistant import AssistantProfilesRepositoryImpl
+from app.database.repositories.background_jobs import BackgroundJobsRepositoryImpl
 from app.database.repositories.business import BusinessRepositoryImpl
 from app.database.repositories.documents import DocumentRepositoryImpl
 from app.database.repositories.events import EventRepositoryImpl
@@ -42,6 +43,7 @@ class Database:
         self.database_url = database_url
         self._engine: Engine | None = None
         self.business = BusinessRepositoryImpl(self)
+        self.background_jobs = BackgroundJobsRepositoryImpl(self)
         self.events = EventRepositoryImpl(self)
         self.examples = ContactExamplesRepositoryImpl(self)
         self.suggestions = SuggestionsRepositoryImpl(self)

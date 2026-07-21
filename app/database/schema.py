@@ -274,6 +274,29 @@ learning_proposals = Table(
     Index("idx_learning_proposals_status_created", "status", "created_at"),
 )
 
+background_jobs = Table(
+    "background_jobs",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("job_type", Text, nullable=False),
+    # JSON payload. Store references/IDs rather than message bodies where possible.
+    Column("payload", Text, nullable=False),
+    Column("idempotency_key", Text, nullable=False, unique=True),
+    # "pending" | "running" | "completed" | "dead"
+    Column("status", Text, nullable=False, default="pending"),
+    Column("attempts", Integer, nullable=False, default=0),
+    Column("max_attempts", Integer, nullable=False, default=3),
+    Column("run_after", Text, nullable=False),
+    Column("lease_owner", Text),
+    Column("lease_expires_at", Text),
+    Column("last_error", Text),
+    Column("created_at", Text, nullable=False),
+    Column("started_at", Text),
+    Column("completed_at", Text),
+    Index("idx_background_jobs_ready", "status", "run_after", "id"),
+    Index("idx_background_jobs_lease", "status", "lease_expires_at"),
+)
+
 generation_runs = Table(
     "generation_runs",
     metadata,

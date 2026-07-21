@@ -8,12 +8,13 @@ Postgres and confirm dialect parity (upserts, RETURNING, booleans, bytea).
 from __future__ import annotations
 
 import os
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import pytest
 
 from app.database.db import Database
+from app.database.schema import background_jobs
 from app.models.documents import Document, DocumentChunk
 from app.models.greeting_rule import GreetingRule
 from app.models.memory import ConversationMessage
@@ -67,6 +68,90 @@ def test_bot_settings(database: Database) -> None:
     assert database.settings.get_bot_setting("default_persona").value == "friendly"
     database.settings.set_bot_setting("default_persona", "formal")
     assert database.settings.get_bot_setting("default_persona").value == "formal"
+
+
+def test_background_jobs_are_idempotent_and_complete(database: Database) -> None:
+    job = database.background_jobs.enqueue(
+        "summary",
+        {"user_id": 7},
+        idempotency_key="summary:7:42",
+    )
+    duplicate = database.background_jobs.enqueue(
+        "summary",
+        {"user_id": 7, "ignored": True},
+        idempotency_key="summary:7:42",
+    )
+    assert duplicate.id == job.id
+    assert duplicate.payload == {"user_id": 7}
+
+    claimed = database.background_jobs.claim_next("worker-a", lease_seconds=30)
+    assert claimed is not None
+    assert claimed.id == job.id
+    assert claimed.status == "running"
+    assert claimed.attempts == 1
+    assert database.background_jobs.complete(job.id, "worker-b") is False
+    assert database.background_jobs.complete(job.id, "worker-a") is True
+    completed = database.background_jobs.get(job.id)
+    assert completed is not None
+    assert completed.status == "completed"
+    assert completed.completed_at is not None
+
+
+def test_background_jobs_retry_dead_letter_and_reclaim_expired_lease(database: Database) -> None:
+    delayed = database.background_jobs.enqueue(
+        "facts",
+        {"user_id": 8},
+        idempotency_key="facts:8:4",
+        max_attempts=2,
+        run_after=datetime.now().astimezone() + timedelta(hours=1),
+    )
+    assert database.background_jobs.claim_next("worker-a", lease_seconds=30) is None
+
+    with database.engine.begin() as connection:
+        connection.execute(
+            background_jobs.update()
+            .where(background_jobs.c.id == delayed.id)
+            .values(run_after=(datetime.now().astimezone() - timedelta(seconds=1)).isoformat())
+        )
+    first = database.background_jobs.claim_next("worker-a", lease_seconds=30)
+    assert first is not None and first.id == delayed.id
+    retried = database.background_jobs.retry_or_dead_letter(
+        delayed.id,
+        "worker-a",
+        "temporary provider failure",
+        run_after=datetime.now().astimezone() - timedelta(seconds=1),
+    )
+    assert retried is not None and retried.status == "pending"
+    second = database.background_jobs.claim_next("worker-b", lease_seconds=30)
+    assert second is not None and second.attempts == 2
+    dead = database.background_jobs.retry_or_dead_letter(
+        delayed.id,
+        "worker-b",
+        "permanent provider failure",
+        run_after=datetime.now().astimezone(),
+    )
+    assert dead is not None
+    assert dead.status == "dead"
+    assert dead.completed_at is not None
+
+    reclaimed_job = database.background_jobs.enqueue(
+        "embeddings", {"user_id": 9}, idempotency_key="embeddings:9:1"
+    )
+    claimed = database.background_jobs.claim_next("worker-a", lease_seconds=30)
+    assert claimed is not None and claimed.id == reclaimed_job.id
+    with database.engine.begin() as connection:
+        connection.execute(
+            background_jobs.update()
+            .where(background_jobs.c.id == reclaimed_job.id)
+            .values(
+                lease_expires_at=(datetime.now().astimezone() - timedelta(seconds=1)).isoformat()
+            )
+        )
+    reclaimed = database.background_jobs.claim_next("worker-b", lease_seconds=30)
+    assert reclaimed is not None
+    assert reclaimed.id == reclaimed_job.id
+    assert reclaimed.attempts == 2
+    assert reclaimed.lease_owner == "worker-b"
 
 
 def test_profile_roundtrip(database: Database) -> None:
