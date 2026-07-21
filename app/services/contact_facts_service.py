@@ -159,7 +159,7 @@ def _parse_fact_object(text: str) -> object | None:
     except json.JSONDecodeError:
         try:
             return ast.literal_eval(text)
-        except (ValueError, SyntaxError):
+        except (TypeError, ValueError, SyntaxError):
             return None
 
 

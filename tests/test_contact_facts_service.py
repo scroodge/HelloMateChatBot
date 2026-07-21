@@ -88,6 +88,7 @@ def test_parse_invalid_returns_empty() -> None:
     assert _parse_facts_json("not json at all", _ALLOWED) == {}
     assert _parse_facts_json("{}", _ALLOWED) == {}
     assert _parse_facts_json("[]", _ALLOWED) == {}
+    assert _parse_facts_json("{{'name': 'Ольга'}}", _ALLOWED) == {}
 
 
 def test_extraction_prompt_rejects_role_leakage_and_chat_noise() -> None:
