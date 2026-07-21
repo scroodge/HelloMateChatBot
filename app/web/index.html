@@ -443,6 +443,7 @@
   <button data-page="settings" onclick="showPage('settings')">
     <span class="icon">⚙️</span>Настройки
   </button>
+  <button data-page="candidates" onclick="showPage('candidates')"><span class="icon">◌</span>Модели</button>
 </nav>
 
 <main>
@@ -703,6 +704,17 @@
     </div><!-- /dtab-history -->
   </div>
 
+  <div class="page" id="page-candidates">
+    <div class="card"><div class="card-title">Кандидат для проверки</div>
+      <div class="activity-lede">Ключи остаются на сервере. Проверка не меняет рабочую модель.</div>
+      <label>Название</label><input id="candidate-name" placeholder="Qwen 14B">
+      <label>Provider</label><select id="candidate-provider"><option value="ollama">Ollama</option><option value="openai">OpenAI-compatible</option></select>
+      <label>Модель</label><input id="candidate-model" placeholder="qwen2.5:14b">
+      <label>Base URL, необязательно</label><input id="candidate-url" placeholder="использовать текущий сервер">
+      <button class="btn" onclick="addEvalCandidate()">Добавить кандидата</button></div>
+    <div class="card"><div class="card-title">Проверки</div><div id="candidate-list" class="activity-meta">Загрузка...</div></div>
+  </div>
+
   <!-- ── PLAYGROUND ── -->
   <div class="page" id="page-playground">
     <div class="card">
@@ -902,6 +914,7 @@ function showPage(name) {
   if (name === 'activity')    loadActivity();
   if (name === 'stats')       loadStats();
   if (name === 'settings')    loadGlobalSettings();
+  if (name === 'candidates')  loadEvalCandidates();
   if (name === 'playground')  loadPlaygroundContacts();
 }
 
@@ -2158,6 +2171,32 @@ async function loadGlobalSettings() {
   } catch(e) {
     el.innerHTML = `<div class="error">${e.message}</div>`;
   }
+}
+
+async function loadEvalCandidates() {
+  const el = document.getElementById('candidate-list');
+  try {
+    const [items, defaults] = await Promise.all([get('/admin/eval-candidates'), get('/admin/eval-candidates/defaults')]);
+    const providerInput = document.getElementById('candidate-provider');
+    if (!providerInput.dataset.initialized) {
+      providerInput.value = defaults.provider;
+      document.getElementById('candidate-model').value = defaults.model;
+      document.getElementById('candidate-url').value = defaults.base_url;
+      providerInput.dataset.initialized = 'true';
+    }
+    el.innerHTML = items.length ? items.map(item => `<div class="activity-row"><div class="activity-copy"><div class="activity-title">${escHtml(item.name)} · ${escHtml(item.model)}</div><div class="activity-meta">${escHtml(item.status || 'new')}${item.summary ? ` · ${Math.round(item.summary.pass_rate * 100)}%` : ''}</div><button class="btn btn-sm" style="width:auto;margin-top:7px" onclick="runEvalCandidate('${escHtml(item.id)}')">Проверить</button></div></div>`).join('') : 'Добавь кандидата, затем запусти проверку.';
+  } catch (e) { el.innerHTML = `<div class="error">${escHtml(e.message)}</div>`; }
+}
+async function addEvalCandidate() {
+  try {
+    await post('/admin/eval-candidates', {name: document.getElementById('candidate-name').value, provider: document.getElementById('candidate-provider').value, model: document.getElementById('candidate-model').value, base_url: document.getElementById('candidate-url').value});
+    toast('Кандидат добавлен'); loadEvalCandidates();
+  } catch (e) { tg.showAlert?.('Ошибка: ' + e.message); }
+}
+async function runEvalCandidate(id) {
+  toast('Идёт проверка кандидата…');
+  try { await post(`/admin/eval-candidates/${id}/evaluate`, {}); toast('Проверка завершена'); loadEvalCandidates(); }
+  catch (e) { tg.showAlert?.('Ошибка: ' + e.message); }
 }
 
 async function saveGlobalSetting() {

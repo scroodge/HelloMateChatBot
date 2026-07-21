@@ -19,6 +19,7 @@ from pydantic import BaseModel
 from app.api.auth import validate_init_data
 from app.database.repositories.events import EventRepository
 from app.database.repositories.feedback import FeedbackRepositoryImpl
+from app.services.candidate_evaluation_service import CandidateEvaluationService
 from app.services.contact_facts_service import ContactFactsService
 from app.services.examples_service import ContactExamplesService
 from app.services.fact_categories_service import FactCategoriesService
@@ -144,6 +145,12 @@ class LearningProposalWriteRequest(BaseModel):
     payload: dict[str, str]
     evidence: dict[str, str]
 
+class CandidateWriteRequest(BaseModel):
+    name: str
+    provider: str
+    model: str
+    base_url: str = ""
+
 
 # ---------------------------------------------------------------------------
 # Router factory
@@ -171,6 +178,7 @@ def create_admin_router(
     processing_status_service: ProcessingStatusService | None = None,
     owner_reply_pairing_service: OwnerReplyPairingService | None = None,
     learning_proposals_service: LearningProposalsService | None = None,
+    candidate_evaluation_service: CandidateEvaluationService | None = None,
     *,
     mini_app_dev: bool = False,
     dev_user_id: int | None = None,
@@ -324,6 +332,34 @@ def create_admin_router(
                     "applied_reference": proposal.applied_reference,
                 }
             )
+        return result
+
+    @router.get("/eval-candidates")
+    async def list_eval_candidates(caller_id: int = AdminUser) -> list[dict[str, object]]:
+        return candidate_evaluation_service.list() if candidate_evaluation_service else []
+
+    @router.get("/eval-candidates/defaults")
+    async def eval_candidate_defaults(caller_id: int = AdminUser) -> dict[str, str]:
+        if candidate_evaluation_service is None:
+            raise HTTPException(status_code=503, detail="Candidate lab is not enabled")
+        return candidate_evaluation_service.defaults()
+
+    @router.post("/eval-candidates")
+    async def add_eval_candidate(request: CandidateWriteRequest, caller_id: int = AdminUser) -> dict[str, object]:
+        if candidate_evaluation_service is None:
+            raise HTTPException(status_code=503, detail="Candidate lab is not enabled")
+        try:
+            return candidate_evaluation_service.add(request.name, request.provider, request.model, request.base_url)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/eval-candidates/{candidate_id}/evaluate")
+    async def evaluate_candidate(candidate_id: str, caller_id: int = AdminUser) -> dict[str, object]:
+        if candidate_evaluation_service is None:
+            raise HTTPException(status_code=503, detail="Candidate lab is not enabled")
+        result = await candidate_evaluation_service.evaluate(candidate_id)
+        if result is None:
+            raise HTTPException(status_code=404, detail="Candidate not found")
         return result
 
     @router.post("/learning-proposals")

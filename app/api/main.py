@@ -12,6 +12,7 @@ from app.api.admin_routes import create_admin_router
 from app.api.routes import create_router
 from app.config import Config
 from app.database.db import Database
+from app.services.candidate_evaluation_service import CandidateEvaluationService
 from app.services.contact_facts_service import ContactFactsService
 from app.services.examples_service import ContactExamplesService
 from app.services.fact_categories_service import FactCategoriesService
@@ -95,6 +96,7 @@ def create_api_app(config: Config, database: Database, processing_status_service
     learning_proposals_service = LearningProposalsService(
         database.learning_proposals, examples_service, facts_service
     )
+    candidate_evaluation_service = CandidateEvaluationService(settings_service, config)
     suggestions_service = SuggestionsService(database.suggestions, database.feedback)
     owner_reply_pairing_service = OwnerReplyPairingService(
         database.owner_reply_pairs,
@@ -112,7 +114,8 @@ def create_api_app(config: Config, database: Database, processing_status_service
         weather_service=weather_service,
         facts_service=facts_service,
         examples_service=examples_service,
-        learning_proposals_service=learning_proposals_service,
+            learning_proposals_service=learning_proposals_service,
+            candidate_evaluation_service=candidate_evaluation_service,
         context_token_budget=config.context_token_budget,
         enabled=config.ai_replies_enabled,
     )
