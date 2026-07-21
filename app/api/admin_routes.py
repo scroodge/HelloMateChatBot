@@ -150,6 +150,7 @@ class CandidateWriteRequest(BaseModel):
     provider: str
     model: str
     base_url: str = ""
+    credential_id: str = "default"
 
 
 # ---------------------------------------------------------------------------
@@ -342,14 +343,14 @@ def create_admin_router(
     async def eval_candidate_defaults(caller_id: int = AdminUser) -> dict[str, str]:
         if candidate_evaluation_service is None:
             raise HTTPException(status_code=503, detail="Candidate lab is not enabled")
-        return candidate_evaluation_service.defaults()
+        return {**candidate_evaluation_service.defaults(), "credential_ids": candidate_evaluation_service.credential_ids()}
 
     @router.post("/eval-candidates")
     async def add_eval_candidate(request: CandidateWriteRequest, caller_id: int = AdminUser) -> dict[str, object]:
         if candidate_evaluation_service is None:
             raise HTTPException(status_code=503, detail="Candidate lab is not enabled")
         try:
-            return candidate_evaluation_service.add(request.name, request.provider, request.model, request.base_url)
+            return candidate_evaluation_service.add(request.name, request.provider, request.model, request.base_url, request.credential_id)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 

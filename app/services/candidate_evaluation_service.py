@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 from app.config import Config
@@ -29,7 +30,9 @@ class CandidateEvaluationService:
             "base_url": self.config.llm_base_url,
         }
 
-    def add(self, name: str, provider: str, model: str, base_url: str) -> dict[str, object]:
+    def add(
+        self, name: str, provider: str, model: str, base_url: str, credential_id: str = "default"
+    ) -> dict[str, object]:
         if provider not in {"ollama", "openai"} or not name.strip() or not model.strip():
             raise ValueError("Name, provider and model are required")
         items = self.list()
@@ -37,10 +40,13 @@ class CandidateEvaluationService:
             item["provider"] == provider
             and item["model"] == model.strip()
             and item["base_url"] == base_url.strip()
+            and item.get("credential_id", "default") == credential_id
             for item in items
         ):
             raise ValueError("This provider, model and base URL candidate already exists")
-        item = {"id": f"candidate-{len(items) + 1}", "name": name.strip()[:80], "provider": provider, "model": model.strip()[:160], "base_url": base_url.strip(), "status": "new"}
+        if credential_id not in self.credential_ids():
+            raise ValueError("Unknown server-side credential ID")
+        item = {"id": f"candidate-{len(items) + 1}", "name": name.strip()[:80], "provider": provider, "model": model.strip()[:160], "base_url": base_url.strip(), "credential_id": credential_id, "status": "new"}
         items.append(item)
         self.settings.set_bot_setting(_KEY, json.dumps(items, ensure_ascii=False))
         return item
@@ -62,5 +68,22 @@ class CandidateEvaluationService:
     def _provider(self, candidate: dict[str, object]) -> object:
         base_url = str(candidate["base_url"]) or self.config.llm_base_url
         if candidate["provider"] == "openai":
-            return OpenAIProvider(base_url, str(candidate["model"]), self.config.llm_api_key, max_tokens=512, temperature=0.0)
+            return OpenAIProvider(base_url, str(candidate["model"]), self._credential(candidate), max_tokens=512, temperature=0.0)
         return OllamaProvider(base_url, str(candidate["model"]), max_tokens=512, temperature=0.0)
+
+    def credential_ids(self) -> list[str]:
+        return ["default", *self._credentials().keys()]
+
+    def _credential(self, candidate: dict[str, object]) -> str:
+        credential_id = str(candidate.get("credential_id", "default"))
+        if credential_id == "default":
+            return self.config.llm_api_key
+        return self._credentials()[credential_id]
+
+    @staticmethod
+    def _credentials() -> dict[str, str]:
+        try:
+            values = json.loads(os.getenv("EVAL_PROVIDER_KEYS_JSON", "{}"))
+        except json.JSONDecodeError:
+            return {}
+        return {str(key): str(value) for key, value in values.items() if value}

@@ -711,6 +711,7 @@
       <label>Provider</label><select id="candidate-provider"><option value="ollama">Ollama</option><option value="openai">OpenAI-compatible</option></select>
       <label>Модель</label><input id="candidate-model" placeholder="qwen2.5:14b">
       <label>Base URL, необязательно</label><input id="candidate-url" placeholder="использовать текущий сервер">
+      <label>Серверный ключ</label><select id="candidate-credential"></select>
       <button class="btn" onclick="addEvalCandidate()">Добавить кандидата</button></div>
     <div class="card"><div class="card-title">Проверки</div><div id="candidate-list" class="activity-meta">Загрузка...</div></div>
   </div>
@@ -2182,6 +2183,7 @@ async function loadEvalCandidates() {
       providerInput.value = defaults.provider;
       document.getElementById('candidate-model').value = defaults.model;
       document.getElementById('candidate-url').value = defaults.base_url;
+      document.getElementById('candidate-credential').innerHTML = (defaults.credential_ids || ['default']).map(id => `<option value="${escHtml(id)}">${escHtml(id)}</option>`).join('');
       providerInput.dataset.initialized = 'true';
     }
     el.innerHTML = items.length ? items.map(item => {
@@ -2193,7 +2195,7 @@ async function loadEvalCandidates() {
 }
 async function addEvalCandidate() {
   try {
-    await post('/admin/eval-candidates', {name: document.getElementById('candidate-name').value, provider: document.getElementById('candidate-provider').value, model: document.getElementById('candidate-model').value, base_url: document.getElementById('candidate-url').value});
+    await post('/admin/eval-candidates', {name: document.getElementById('candidate-name').value, provider: document.getElementById('candidate-provider').value, model: document.getElementById('candidate-model').value, base_url: document.getElementById('candidate-url').value, credential_id: document.getElementById('candidate-credential').value});
     toast('Кандидат добавлен'); loadEvalCandidates();
   } catch (e) { tg.showAlert?.('Ошибка: ' + e.message); }
 }
