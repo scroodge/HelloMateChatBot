@@ -114,8 +114,7 @@ def create_api_app(config: Config, database: Database, processing_status_service
         weather_service=weather_service,
         facts_service=facts_service,
         examples_service=examples_service,
-            learning_proposals_service=learning_proposals_service,
-            candidate_evaluation_service=candidate_evaluation_service,
+        learning_proposals_service=learning_proposals_service,
         context_token_budget=config.context_token_budget,
         enabled=config.ai_replies_enabled,
     )
@@ -155,6 +154,8 @@ def create_api_app(config: Config, database: Database, processing_status_service
             feedback_repository=database.feedback,
             processing_status_service=processing_status_service,
             owner_reply_pairing_service=owner_reply_pairing_service,
+            learning_proposals_service=learning_proposals_service,
+            candidate_evaluation_service=candidate_evaluation_service,
             mini_app_dev=config.mini_app_dev,
             dev_user_id=dev_user_id,
         ),
