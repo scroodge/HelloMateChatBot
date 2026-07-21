@@ -62,3 +62,26 @@ text and the `expand` tool resolves refs — call them when you need
 data sqz hasn't touched.
 
 <!-- END sqz-agents-guidance -->
+
+## Phase 19 — Eval Lab gate
+
+Before an agent changes reply prompts, prompt assembly/context, reply sanitizing,
+LLM provider/model configuration, or related safety behavior, it must run the
+offline Eval Lab regression gate:
+
+```bash
+python scripts/run_eval.py \
+  --dataset evals/datasets/regression.jsonl \
+  --provider fixture \
+  --output-json /tmp/hellomate-eval.json \
+  --output-report /tmp/hellomate-eval.md
+```
+
+The command must exit successfully. Inspect and report any hard failure; do not
+weaken the regression dataset or its thresholds to make a candidate pass.
+
+For an intentional prompt/provider/model comparison, follow
+[`docs/EVAL_LAB_AGENT_RUNBOOK.md`](docs/EVAL_LAB_AGENT_RUNBOOK.md). Live runs
+may use credentials and model capacity, so an agent must run them only when the
+user asks for the comparison or explicitly authorizes it. Never commit
+owner-approved cases or files from `evals/owner_approved/` or `evals/reports/`.

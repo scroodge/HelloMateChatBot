@@ -10,6 +10,7 @@ arrived since the last extraction.
 
 from __future__ import annotations
 
+import ast
 import asyncio
 import json
 import logging
@@ -125,24 +126,20 @@ def _dedup(values: list[str]) -> list[str]:
 
 
 def _parse_facts_json(raw: str, allowed_keys: frozenset[str]) -> dict[str, str]:
-    """Extract a JSON object from the LLM response, tolerating markdown fences."""
+    """Extract a fact object from the LLM response, tolerating common safe variants."""
     text = raw.strip()
     m = _JSON_FENCE.search(text)
     if m:
         text = m.group(1).strip()
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError:
-        # Try to extract the first {...} block
+    data = _parse_fact_object(text)
+    if data is None:
         start = text.find("{")
         end = text.rfind("}")
-        if start != -1 and end != -1 and end > start:
-            try:
-                data = json.loads(text[start : end + 1])
-            except json.JSONDecodeError:
-                return {}
-        else:
+        if start == -1 or end == -1 or end <= start:
             return {}
+        data = _parse_fact_object(text[start : end + 1])
+    if data is None:
+        return {}
     if not isinstance(data, dict):
         return {}
     return {
@@ -150,6 +147,20 @@ def _parse_facts_json(raw: str, allowed_keys: frozenset[str]) -> dict[str, str]:
         for k, v in data.items()
         if isinstance(k, str) and k in allowed_keys and v and str(v).strip()
     }
+
+
+def _parse_fact_object(text: str) -> object | None:
+    """Parse strict JSON first, then a Python literal emitted by some local models.
+
+    ``ast.literal_eval`` accepts data literals only and never executes model output.
+    """
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        try:
+            return ast.literal_eval(text)
+        except (ValueError, SyntaxError):
+            return None
 
 
 def _build_extraction_messages(

@@ -29,3 +29,6 @@ python scripts/run_eval.py \
 ```
 
 The JSON artifact contains every reply, per-case score, hard safety failures, latency, and token usage. A hard failure (language, AI/meta leakage, required clarification, reserved privacy, unsupported commitment, or length) always fails the run and is not averaged away. `--judge-provider` adds model-assisted scores and reasons for accuracy/helpfulness, groundedness, style/persona, privacy boundary, and comparison to the reference reply. Keep judge runs local and use owner-approved cases only with `--allow-owner-approved`.
+
+For the verified Contabo procedure, live-result interpretation, and privacy
+rules, see [`docs/EVAL_LAB_AGENT_RUNBOOK.md`](../docs/EVAL_LAB_AGENT_RUNBOOK.md).

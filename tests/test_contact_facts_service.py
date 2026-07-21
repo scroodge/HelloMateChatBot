@@ -64,6 +64,12 @@ def test_parse_fenced_json() -> None:
     assert result == {"name": "Ivan", "occupation": "дизайнер"}
 
 
+def test_parse_python_dict_from_local_model() -> None:
+    raw = "{'name': 'Ольга', 'city': 'Минск'}"
+    result = _parse_facts_json(raw, _ALLOWED)
+    assert result == {"name": "Ольга", "city": "Минск"}
+
+
 def test_parse_ignores_unknown_keys() -> None:
     raw = '{"name": "Петя", "secret_key": "oops", "city": "Минск"}'
     result = _parse_facts_json(raw, _ALLOWED)
