@@ -64,6 +64,7 @@ async def test_openai_provider_complete(monkeypatch: pytest.MonkeyPatch) -> None
             assert headers["Authorization"] == "Bearer secret"
             assert json["max_tokens"] == 128
             assert "max_completion_tokens" not in json
+            assert json["stop"] == provider._STOP
             return MockResponse()
 
     monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: MockClient())
@@ -101,6 +102,7 @@ async def test_openai_gpt5_provider_uses_max_completion_tokens(
             assert headers["Authorization"] == "Bearer secret"
             assert json["max_completion_tokens"] == 128
             assert "max_tokens" not in json
+            assert "stop" not in json
             return MockResponse()
 
     monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: MockClient())

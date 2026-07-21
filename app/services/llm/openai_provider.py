@@ -43,11 +43,12 @@ class OpenAIProvider:
             "model": self.model,
             "messages": request.messages,
             "temperature": self.temperature,
-            "stop": self._STOP,
         }
         payload["max_completion_tokens" if self._uses_completion_tokens else "max_tokens"] = (
             self.max_tokens
         )
+        if not self._uses_completion_tokens:
+            payload["stop"] = self._STOP
         headers = {"Authorization": f"Bearer {self.api_key}"}
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
