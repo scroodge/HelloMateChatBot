@@ -2184,7 +2184,11 @@ async function loadEvalCandidates() {
       document.getElementById('candidate-url').value = defaults.base_url;
       providerInput.dataset.initialized = 'true';
     }
-    el.innerHTML = items.length ? items.map(item => `<div class="activity-row"><div class="activity-copy"><div class="activity-title">${escHtml(item.name)} · ${escHtml(item.model)}</div><div class="activity-meta">${escHtml(item.status || 'new')}${item.summary ? ` · ${Math.round(item.summary.pass_rate * 100)}%` : ''}</div><button class="btn btn-sm" style="width:auto;margin-top:7px" onclick="runEvalCandidate('${escHtml(item.id)}')">Проверить</button></div></div>`).join('') : 'Добавь кандидата, затем запусти проверку.';
+    el.innerHTML = items.length ? items.map(item => {
+      const report = item.summary ? ` · ${Math.round(item.summary.pass_rate * 100)}% пройдено · ${item.summary.hard_failure_count} hard failures` : '';
+      const verdict = item.status === 'passed' ? 'Прошёл baseline, всё ещё не влияет на ответы' : item.status === 'failed' ? 'Не прошёл, routing не меняется' : 'Ещё не проверен';
+      return `<div class="activity-row"><div class="activity-copy"><div class="activity-title">${escHtml(item.name)} · ${escHtml(item.model)}</div><div class="activity-meta">${escHtml(verdict)}${report}</div><button class="btn btn-sm" style="width:auto;margin-top:7px" onclick="runEvalCandidate('${escHtml(item.id)}')">Проверить снова</button></div></div>`;
+    }).join('') : 'Добавь кандидата, затем запусти проверку.';
   } catch (e) { el.innerHTML = `<div class="error">${escHtml(e.message)}</div>`; }
 }
 async function addEvalCandidate() {

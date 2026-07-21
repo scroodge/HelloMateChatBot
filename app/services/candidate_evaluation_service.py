@@ -32,8 +32,16 @@ class CandidateEvaluationService:
     def add(self, name: str, provider: str, model: str, base_url: str) -> dict[str, object]:
         if provider not in {"ollama", "openai"} or not name.strip() or not model.strip():
             raise ValueError("Name, provider and model are required")
-        item = {"id": f"candidate-{len(self.list()) + 1}", "name": name.strip()[:80], "provider": provider, "model": model.strip()[:160], "base_url": base_url.strip(), "status": "new"}
-        items = self.list() + [item]
+        items = self.list()
+        if any(
+            item["provider"] == provider
+            and item["model"] == model.strip()
+            and item["base_url"] == base_url.strip()
+            for item in items
+        ):
+            raise ValueError("This provider, model and base URL candidate already exists")
+        item = {"id": f"candidate-{len(items) + 1}", "name": name.strip()[:80], "provider": provider, "model": model.strip()[:160], "base_url": base_url.strip(), "status": "new"}
+        items.append(item)
         self.settings.set_bot_setting(_KEY, json.dumps(items, ensure_ascii=False))
         return item
 
