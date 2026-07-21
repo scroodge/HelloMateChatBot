@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-22T00:00:00+03:00",
+  "title": "Design System: HelloMate Mini App",
+  "extensions": {
+    "colorMeta": {
+      "action-blue": {"role": "primary", "displayName": "Clear Action Blue", "canonical": "#2979ff", "tonalRamp": ["#0b2759", "#123d85", "#1959bd", "#2979ff", "#5b9dff", "#8bbaff", "#b9d6ff", "#e6f1ff"]},
+      "surface": {"role": "neutral", "displayName": "Soft Utility Surface", "canonical": "#f0f0f5", "tonalRamp": ["#202026", "#40404b", "#60606f", "#858593", "#aaaab7", "#c9c9d3", "#e1e1e8", "#f6f6fa"]}
+    },
+    "motion": [
+      {"name": "state-transition", "value": "150ms ease-out", "purpose": "Focus, selection, and toast state only."}
+    ],
+    "breakpoints": [
+      {"name": "mobile-first", "value": "0px"}
+    ]
+  },
+  "components": [
+    {"name": "Primary Button", "kind": "button", "refersTo": "button-primary", "description": "The single next safe action in a card.", "html": "<button class=\"ds-btn-primary\">ПРОВЕРИТЬ</button>", "css": ".ds-btn-primary{min-height:44px;padding:9px 11px;border:0;border-radius:8px;background:#2979ff;color:#fff;font:600 14px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}.ds-btn-primary:hover{background:#1959bd}.ds-btn-primary:focus-visible{outline:2px solid #2979ff;outline-offset:2px}"},
+    {"name": "Secondary Button", "kind": "button", "refersTo": "button-secondary", "description": "A compact row action that does not compete with the next safe action.", "html": "<button class=\"ds-btn-secondary\">Удалить</button>", "css": ".ds-btn-secondary{min-height:36px;padding:7px 10px;border:1px solid #00000014;border-radius:8px;background:#f0f0f5;color:#111;font:600 13px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}.ds-btn-secondary:hover{background:#e1e1e8}.ds-btn-secondary:focus-visible{outline:2px solid #2979ff;outline-offset:2px}"},
+    {"name": "Text Field", "kind": "input", "refersTo": "input", "description": "A full-width configuration field with an explicit label.", "html": "<label class=\"ds-label\">Модель<input class=\"ds-input\" placeholder=\"ID модели\"></label>", "css": ".ds-label{display:grid;gap:4px;color:#888;font:400 12px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}.ds-input{width:100%;padding:9px 11px;border:1px solid #00000014;border-radius:8px;background:#fff;color:#111;font:400 14px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}.ds-input:focus{outline:none;border-color:#2979ff}"},
+    {"name": "Card", "kind": "card", "refersTo": "card", "description": "A quiet group of related owner-only controls.", "html": "<section class=\"ds-card\"><strong>Проверка</strong><p>Результат появится здесь.</p></section>", "css": ".ds-card{padding:12px;border-radius:12px;background:#f0f0f5;color:#111;font:400 14px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}.ds-card strong{font-size:13px}.ds-card p{margin:6px 0 0;color:#888}"},
+    {"name": "Status Row", "kind": "custom", "refersTo": "activity-row", "description": "Text-first operational status with a restrained semantic marker.", "html": "<div class=\"ds-status\"><i></i><div><strong>Проверка завершена</strong><span>50 cases</span></div></div>", "css": ".ds-status{display:flex;gap:9px;align-items:flex-start;color:#111;font:400 13px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}.ds-status i{width:9px;height:9px;margin-top:5px;border-radius:50%;background:#2e7d32}.ds-status strong,.ds-status span{display:block}.ds-status span{margin-top:2px;color:#888;font-size:11px}"}
+  ],
+  "narrative": {
+    "northStar": "The Quiet Control Room",
+    "overview": "A calm, compact owner-only operational surface for private Telegram reply assistance. It makes the next safe action obvious before implementation detail.",
+    "keyCharacteristics": ["Dense but breathable mobile-first operational information.", "Text-labelled status, never color-only meaning.", "Flat tonal layers, not ornamental depth."],
+    "rules": [{"name": "The One-Action Rule", "body": "Clear Action Blue is reserved for the single next useful action and the current selection.", "section": "colors"}, {"name": "The Flat-by-Default Rule", "body": "Cards stay flat at rest; tonal contrast explains structure.", "section": "elevation"}],
+    "dos": ["Do use Telegram theme variables first.", "Do pair every status color with a concise Russian text label."],
+    "donts": ["Don't build a noisy monitoring wall or a generic SaaS metric dashboard.", "Don't use decorative AI effects, gradient text, glassmorphism, or colored side-stripe cards."]
+  }
+}

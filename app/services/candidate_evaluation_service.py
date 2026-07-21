@@ -59,6 +59,14 @@ class CandidateEvaluationService:
         self.settings.set_bot_setting(_KEY, json.dumps(items, ensure_ascii=False))
         return item
 
+    def delete(self, candidate_id: str) -> bool:
+        items = self.list()
+        remaining = [item for item in items if item["id"] != candidate_id]
+        if len(remaining) == len(items):
+            return False
+        self.settings.set_bot_setting(_KEY, json.dumps(remaining, ensure_ascii=False))
+        return True
+
     async def evaluate(self, candidate_id: str) -> dict[str, object] | None:
         items = self.list()
         candidate = next((item for item in items if item["id"] == candidate_id), None)

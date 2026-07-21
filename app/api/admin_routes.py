@@ -365,6 +365,14 @@ def create_admin_router(
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+    @router.delete("/eval-candidates/{candidate_id}")
+    async def delete_eval_candidate(candidate_id: str, caller_id: int = AdminUser) -> dict[str, bool]:
+        if candidate_evaluation_service is None:
+            raise HTTPException(status_code=503, detail="Candidate lab is not enabled")
+        if not candidate_evaluation_service.delete(candidate_id):
+            raise HTTPException(status_code=404, detail="Candidate not found")
+        return {"deleted": True}
+
     @router.post("/eval-candidates/{candidate_id}/evaluate")
     async def evaluate_candidate(
         candidate_id: str, caller_id: int = AdminUser

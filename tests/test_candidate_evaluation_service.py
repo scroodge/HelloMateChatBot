@@ -76,3 +76,19 @@ def test_direct_openai_gpt5_candidate_gets_reasoning_budget() -> None:
 
     assert provider.max_tokens == 1024
     assert provider.reasoning_effort == "minimal"
+
+
+def test_delete_removes_only_requested_candidate() -> None:
+    settings = FakeSettings(
+        json.dumps(
+            [
+                {"id": "candidate-1", "status": "failed"},
+                {"id": "candidate-2", "status": "new"},
+            ]
+        )
+    )
+    service = CandidateEvaluationService(settings, MagicMock())
+
+    assert service.delete("candidate-1") is True
+    assert json.loads(settings.value) == [{"id": "candidate-2", "status": "new"}]
+    assert service.delete("candidate-missing") is False

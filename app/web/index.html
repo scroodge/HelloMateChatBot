@@ -2192,7 +2192,7 @@ async function loadEvalCandidates() {
     el.innerHTML = items.length ? items.map(item => {
       const report = item.summary ? ` · ${Math.round(item.summary.pass_rate * 100)}% пройдено · ${item.summary.hard_failure_count} hard failures` : '';
       const verdict = item.status === 'passed' ? 'Прошёл baseline, всё ещё не влияет на ответы' : item.status === 'failed' ? 'Не прошёл, routing не меняется' : 'Ещё не проверен';
-      return `<div class="activity-row"><div class="activity-copy"><div class="activity-title">${escHtml(item.name)} · ${escHtml(item.model)}</div><div class="activity-meta">${escHtml(verdict)}${report}</div><button class="btn btn-sm" style="width:auto;margin-top:7px" onclick="runEvalCandidate('${escHtml(item.id)}')">Проверить снова</button></div></div>`;
+      return `<div class="activity-row"><div class="activity-copy"><div class="activity-title">${escHtml(item.name)} · ${escHtml(item.model)}</div><div class="activity-meta">${escHtml(verdict)}${report}</div><div class="row" style="margin-top:7px"><button class="btn btn-sm" style="width:auto" onclick="runEvalCandidate('${escHtml(item.id)}')">Проверить снова</button><button class="btn btn-sm btn-secondary" style="width:auto" onclick="deleteEvalCandidate('${escHtml(item.id)}')">Удалить</button></div></div></div>`;
     }).join('') : 'Добавь кандидата, затем запусти проверку.';
   } catch (e) {
     const message = `Не удалось загрузить серверные ключи: ${e.message}`;
@@ -2213,6 +2213,14 @@ async function runEvalCandidate(id) {
   toast('Идёт проверка кандидата…');
   try { await post(`/admin/eval-candidates/${id}/evaluate`, {}); toast('Проверка завершена'); loadEvalCandidates(); }
   catch (e) { tg.showAlert?.('Ошибка: ' + e.message); }
+}
+async function deleteEvalCandidate(id) {
+  if (!confirm('Удалить этого кандидата и его результат?')) return;
+  try {
+    await del(`/admin/eval-candidates/${id}`);
+    toast('Кандидат удалён');
+    loadEvalCandidates();
+  } catch (e) { tg.showAlert?.('Ошибка: ' + e.message); }
 }
 
 async function saveGlobalSetting() {
