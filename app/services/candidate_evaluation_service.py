@@ -4,6 +4,8 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+from typing import TYPE_CHECKING
+from uuid import uuid4
 
 from app.config import Config
 from app.evals.core import load_cases, run_cases, summarize
@@ -12,10 +14,19 @@ from app.services.llm.openai_provider import OpenAIProvider
 
 _KEY = "eval_candidates_v1"
 
+if TYPE_CHECKING:
+    from app.database.repositories.background_jobs import BackgroundJobsRepository
+
 
 class CandidateEvaluationService:
-    def __init__(self, settings: object, config: Config) -> None:
+    def __init__(
+        self,
+        settings: object,
+        config: Config,
+        background_jobs: BackgroundJobsRepository | None = None,
+    ) -> None:
         self.settings, self.config = settings, config
+        self._background_jobs = background_jobs
 
     def list(self) -> list[dict[str, object]]:
         try:
@@ -47,7 +58,7 @@ class CandidateEvaluationService:
         if credential_id not in self.credential_ids():
             raise ValueError("Unknown server-side credential ID")
         item = {
-            "id": f"candidate-{len(items) + 1}",
+            "id": f"candidate-{uuid4().hex[:12]}",
             "name": name.strip()[:80],
             "provider": provider,
             "model": model.strip()[:160],
@@ -67,11 +78,37 @@ class CandidateEvaluationService:
         self.settings.set_bot_setting(_KEY, json.dumps(remaining, ensure_ascii=False))
         return True
 
+    def enqueue_evaluation(self, candidate_id: str) -> dict[str, object] | None:
+        if self._background_jobs is None:
+            raise RuntimeError("Background worker is not enabled")
+        items = self.list()
+        candidate = next((item for item in items if item["id"] == candidate_id), None)
+        if candidate is None:
+            return None
+        if candidate.get("status") in {"queued", "running"}:
+            return candidate
+
+        version = int(candidate.get("evaluation_version", 0)) + 1
+        job = self._background_jobs.enqueue(
+            "candidate_evaluation",
+            {"candidate_id": candidate_id},
+            idempotency_key=f"candidate-evaluation:{candidate_id}:{version}",
+            max_attempts=3,
+        )
+        candidate["evaluation_version"] = version
+        candidate["job_id"] = job.id
+        candidate["status"] = "queued"
+        candidate.pop("summary", None)
+        self._save(items)
+        return candidate
+
     async def evaluate(self, candidate_id: str) -> dict[str, object] | None:
         items = self.list()
         candidate = next((item for item in items if item["id"] == candidate_id), None)
         if candidate is None:
             return None
+        candidate["status"] = "running"
+        self._save(items)
         try:
             cases = load_cases(Path("evals/datasets/regression.jsonl"))
             provider = self._provider(candidate)
@@ -91,8 +128,11 @@ class CandidateEvaluationService:
             if not summary["hard_failure_count"] and summary["pass_rate"] == 1
             else "failed"
         )
-        self.settings.set_bot_setting(_KEY, json.dumps(items, ensure_ascii=False))
+        self._save(items)
         return candidate
+
+    def _save(self, items: list[dict[str, object]]) -> None:
+        self.settings.set_bot_setting(_KEY, json.dumps(items, ensure_ascii=False))
 
     def _provider(self, candidate: dict[str, object]) -> object:
         base_url = str(candidate["base_url"]) or self.config.llm_base_url

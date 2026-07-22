@@ -19,6 +19,7 @@ from pydantic import BaseModel
 from app.api.auth import validate_init_data
 from app.database.repositories.events import EventRepository
 from app.database.repositories.feedback import FeedbackRepositoryImpl
+from app.services.background_worker import BackgroundWorker
 from app.services.candidate_evaluation_service import CandidateEvaluationService
 from app.services.contact_facts_service import ContactFactsService
 from app.services.examples_service import ContactExamplesService
@@ -180,6 +181,7 @@ def create_admin_router(
     owner_reply_pairing_service: OwnerReplyPairingService | None = None,
     learning_proposals_service: LearningProposalsService | None = None,
     candidate_evaluation_service: CandidateEvaluationService | None = None,
+    background_worker: BackgroundWorker | None = None,
     *,
     mini_app_dev: bool = False,
     dev_user_id: int | None = None,
@@ -339,6 +341,12 @@ def create_admin_router(
     async def list_eval_candidates(caller_id: int = AdminUser) -> list[dict[str, object]]:
         return candidate_evaluation_service.list() if candidate_evaluation_service else []
 
+    @router.get("/background-jobs/health")
+    async def background_jobs_health(caller_id: int = AdminUser) -> dict[str, object]:
+        if background_worker is None:
+            raise HTTPException(status_code=503, detail="Background worker is not enabled")
+        return background_worker.health()
+
     @router.get("/eval-candidates/defaults")
     async def eval_candidate_defaults(caller_id: int = AdminUser) -> dict[str, object]:
         if candidate_evaluation_service is None:
@@ -366,7 +374,9 @@ def create_admin_router(
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @router.delete("/eval-candidates/{candidate_id}")
-    async def delete_eval_candidate(candidate_id: str, caller_id: int = AdminUser) -> dict[str, bool]:
+    async def delete_eval_candidate(
+        candidate_id: str, caller_id: int = AdminUser
+    ) -> dict[str, bool]:
         if candidate_evaluation_service is None:
             raise HTTPException(status_code=503, detail="Candidate lab is not enabled")
         if not candidate_evaluation_service.delete(candidate_id):
@@ -379,7 +389,10 @@ def create_admin_router(
     ) -> dict[str, object]:
         if candidate_evaluation_service is None:
             raise HTTPException(status_code=503, detail="Candidate lab is not enabled")
-        result = await candidate_evaluation_service.evaluate(candidate_id)
+        try:
+            result = candidate_evaluation_service.enqueue_evaluation(candidate_id)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
         if result is None:
             raise HTTPException(status_code=404, detail="Candidate not found")
         return result

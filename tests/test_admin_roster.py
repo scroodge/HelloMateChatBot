@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from app.api.admin_routes import create_admin_router
 from app.database.db import Database
 from app.models.memory import ConversationMessage
+from app.services.background_worker import BackgroundWorker
 from app.services.candidate_evaluation_service import CandidateEvaluationService
 from app.services.examples_service import ContactExamplesService
 from app.services.greeting_rules_service import GreetingRulesService
@@ -59,7 +60,9 @@ def _make_client(db: Database) -> tuple[TestClient, ProfileService, SettingsServ
     candidate_evaluation_service = CandidateEvaluationService(
         settings_service,
         MagicMock(llm_provider="ollama", llm_model="test", llm_base_url="http://ollama"),
+        db.background_jobs,
     )
+    background_worker = BackgroundWorker(db.background_jobs, {})
 
     app = FastAPI()
     app.include_router(
@@ -81,6 +84,7 @@ def _make_client(db: Database) -> tuple[TestClient, ProfileService, SettingsServ
             owner_reply_pairing_service=owner_reply_pairing_service,
             learning_proposals_service=learning_proposals_service,
             candidate_evaluation_service=candidate_evaluation_service,
+            background_worker=background_worker,
             mini_app_dev=True,  # bypass Telegram auth in tests
             dev_user_id=ADMIN_ID,
         ),
@@ -102,6 +106,56 @@ def test_eval_candidate_defaults_exposes_credential_ids(tmp_path, monkeypatch) -
         "base_url": "http://ollama",
         "credential_ids": ["default", "openrouter", "openai"],
     }
+
+
+def test_delete_eval_candidate_removes_saved_result(tmp_path) -> None:
+    with Database(f"sqlite:///{tmp_path / 'candidate-delete.db'}") as db:
+        client, _, settings = _make_client(db)
+        settings.set_bot_setting(
+            "eval_candidates_v1",
+            json.dumps([{"id": "candidate-1", "name": "Old result", "status": "failed"}]),
+        )
+
+        response = client.delete("/api/admin/eval-candidates/candidate-1")
+
+        assert response.status_code == 200
+        assert response.json() == {"deleted": True}
+        assert client.get("/api/admin/eval-candidates").json() == []
+
+
+def test_eval_candidate_is_queued_without_waiting_for_model(tmp_path) -> None:
+    with Database(f"sqlite:///{tmp_path / 'candidate-queue.db'}") as db:
+        client, _, settings = _make_client(db)
+        settings.set_bot_setting(
+            "eval_candidates_v1",
+            json.dumps([{"id": "candidate-1", "name": "Slow model", "status": "new"}]),
+        )
+
+        response = client.post("/api/admin/eval-candidates/candidate-1/evaluate")
+        saved = client.get("/api/admin/eval-candidates").json()
+        job = db.background_jobs.claim_next("test-worker", lease_seconds=30)
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "queued"
+    assert saved[0]["status"] == "queued"
+    assert job is not None
+    assert job.payload == {"candidate_id": "candidate-1"}
+
+
+def test_background_jobs_health_exposes_queue_state(tmp_path) -> None:
+    with Database(f"sqlite:///{tmp_path / 'queue-health.db'}") as db:
+        client, _, _ = _make_client(db)
+        db.background_jobs.enqueue(
+            "candidate_evaluation",
+            {"candidate_id": "candidate-1"},
+            idempotency_key="candidate-evaluation:candidate-1:1",
+        )
+
+        response = client.get("/api/admin/background-jobs/health")
+
+    assert response.status_code == 200
+    assert response.json()["running"] is False
+    assert response.json()["queue"]["pending"] == 1
 
 
 def test_roster_includes_profile_only_contacts(tmp_path) -> None:

@@ -95,6 +95,12 @@ def test_background_jobs_are_idempotent_and_complete(database: Database) -> None
     assert completed is not None
     assert completed.status == "completed"
     assert completed.completed_at is not None
+    assert database.background_jobs.stats() == {
+        "pending": 0,
+        "running": 0,
+        "completed": 1,
+        "dead": 0,
+    }
 
 
 def test_background_jobs_retry_dead_letter_and_reclaim_expired_lease(database: Database) -> None:

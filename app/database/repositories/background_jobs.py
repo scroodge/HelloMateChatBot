@@ -6,7 +6,7 @@ import json
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any, Protocol
 
-from sqlalchemy import and_, or_, select, update
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
 from app.database.schema import background_jobs
@@ -34,6 +34,8 @@ class BackgroundJobsRepository(Protocol):
     def retry_or_dead_letter(
         self, job_id: int, worker_id: str, error: str, *, run_after: datetime
     ) -> BackgroundJob | None: ...
+
+    def stats(self) -> dict[str, int]: ...
 
 
 class BackgroundJobsRepositoryImpl(BackgroundJobsRepository):
@@ -182,6 +184,20 @@ class BackgroundJobsRepositoryImpl(BackgroundJobsRepository):
                 )
             )
         return self.get(job_id) if result.rowcount == 1 else None
+
+    def stats(self) -> dict[str, int]:
+        with self._db.engine.connect() as conn:
+            rows = conn.execute(
+                select(background_jobs.c.status, func.count(background_jobs.c.id))
+                .group_by(background_jobs.c.status)
+            ).all()
+        counts = {str(status): int(count) for status, count in rows}
+        return {
+            "pending": counts.get("pending", 0),
+            "running": counts.get("running", 0),
+            "completed": counts.get("completed", 0),
+            "dead": counts.get("dead", 0),
+        }
 
     @staticmethod
     def _from_row(row: object) -> BackgroundJob:

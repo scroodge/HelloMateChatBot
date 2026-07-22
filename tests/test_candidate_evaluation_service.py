@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from unittest.mock import MagicMock
 
 import pytest
 
+from app.models.background_job import BackgroundJob
 from app.services.candidate_evaluation_service import CandidateEvaluationService
 
 
@@ -92,3 +94,31 @@ def test_delete_removes_only_requested_candidate() -> None:
     assert service.delete("candidate-1") is True
     assert json.loads(settings.value) == [{"id": "candidate-2", "status": "new"}]
     assert service.delete("candidate-missing") is False
+
+
+def test_enqueue_marks_candidate_queued_and_keeps_one_active_run() -> None:
+    settings = FakeSettings(
+        json.dumps([{"id": "candidate-1", "status": "failed", "evaluation_version": 2}])
+    )
+    jobs = MagicMock()
+    jobs.enqueue.return_value = BackgroundJob(
+        id=42,
+        job_type="candidate_evaluation",
+        payload={"candidate_id": "candidate-1"},
+        idempotency_key="candidate-evaluation:candidate-1:3",
+        status="pending",
+        attempts=0,
+        max_attempts=3,
+        run_after=datetime.now().astimezone(),
+        created_at=datetime.now().astimezone(),
+    )
+    service = CandidateEvaluationService(settings, MagicMock(), jobs)
+
+    queued = service.enqueue_evaluation("candidate-1")
+
+    assert queued is not None
+    assert queued["status"] == "queued"
+    assert queued["job_id"] == 42
+    assert queued["evaluation_version"] == 3
+    assert service.enqueue_evaluation("candidate-1") == queued
+    jobs.enqueue.assert_called_once()

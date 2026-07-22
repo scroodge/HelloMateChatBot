@@ -2190,10 +2190,17 @@ async function loadEvalCandidates() {
     }
     formError.hidden = true;
     el.innerHTML = items.length ? items.map(item => {
+      const isWorking = item.status === 'queued' || item.status === 'running';
       const report = item.summary ? ` · ${Math.round(item.summary.pass_rate * 100)}% пройдено · ${item.summary.hard_failure_count} hard failures` : '';
-      const verdict = item.status === 'passed' ? 'Прошёл baseline, всё ещё не влияет на ответы' : item.status === 'failed' ? 'Не прошёл, routing не меняется' : 'Ещё не проверен';
-      return `<div class="activity-row"><div class="activity-copy"><div class="activity-title">${escHtml(item.name)} · ${escHtml(item.model)}</div><div class="activity-meta">${escHtml(verdict)}${report}</div><div class="row" style="margin-top:7px"><button class="btn btn-sm" style="width:auto" onclick="runEvalCandidate('${escHtml(item.id)}')">Проверить снова</button><button class="btn btn-sm btn-secondary" style="width:auto" onclick="deleteEvalCandidate('${escHtml(item.id)}')">Удалить</button></div></div></div>`;
+      const verdict = item.status === 'passed' ? 'Прошёл baseline, всё ещё не влияет на ответы' : item.status === 'failed' ? 'Не прошёл, routing не меняется' : item.status === 'queued' ? 'В очереди, можно закрыть Mini App' : item.status === 'running' ? 'Выполняется в фоне, результат появится здесь' : 'Ещё не проверен';
+      const marker = item.status === 'passed' ? 'ok' : item.status === 'failed' ? 'problem' : isWorking ? 'live' : '';
+      const runLabel = isWorking ? 'Проверка запущена' : 'Проверить снова';
+      return `<div class="activity-row"><span class="activity-mark ${marker}"></span><div class="activity-copy"><div class="activity-title">${escHtml(item.name)} · ${escHtml(item.model)}</div><div class="activity-meta">${escHtml(verdict)}${report}</div><div class="row" style="margin-top:7px"><button class="btn btn-sm" style="width:auto" ${isWorking ? 'disabled' : ''} onclick="runEvalCandidate('${escHtml(item.id)}')">${runLabel}</button><button class="btn btn-sm btn-secondary" style="width:auto" onclick="deleteEvalCandidate('${escHtml(item.id)}')">Удалить</button></div></div></div>`;
     }).join('') : 'Добавь кандидата, затем запусти проверку.';
+    clearTimeout(window.candidateRefreshTimer);
+    if (items.some(item => item.status === 'queued' || item.status === 'running')) {
+      window.candidateRefreshTimer = setTimeout(loadEvalCandidates, 3000);
+    }
   } catch (e) {
     const message = `Не удалось загрузить серверные ключи: ${e.message}`;
     formError.textContent = message;
@@ -2210,8 +2217,12 @@ async function addEvalCandidate() {
   } catch (e) { tg.showAlert?.('Ошибка: ' + e.message); }
 }
 async function runEvalCandidate(id) {
-  toast('Идёт проверка кандидата…');
-  try { await post(`/admin/eval-candidates/${id}/evaluate`, {}); toast('Проверка завершена'); loadEvalCandidates(); }
+  try {
+    await post(`/admin/eval-candidates/${id}/evaluate`, {});
+    toast('Проверка поставлена в очередь');
+    loadEvalCandidates();
+    setTimeout(loadEvalCandidates, 2000);
+  }
   catch (e) { tg.showAlert?.('Ошибка: ' + e.message); }
 }
 async function deleteEvalCandidate(id) {

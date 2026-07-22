@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -12,6 +13,7 @@ from app.api.admin_routes import create_admin_router
 from app.api.routes import create_router
 from app.config import Config
 from app.database.db import Database
+from app.services.background_worker import BackgroundWorker
 from app.services.candidate_evaluation_service import CandidateEvaluationService
 from app.services.contact_facts_service import ContactFactsService
 from app.services.examples_service import ContactExamplesService
@@ -96,7 +98,9 @@ def create_api_app(config: Config, database: Database, processing_status_service
     learning_proposals_service = LearningProposalsService(
         database.learning_proposals, examples_service, facts_service
     )
-    candidate_evaluation_service = CandidateEvaluationService(settings_service, config)
+    candidate_evaluation_service = CandidateEvaluationService(
+        settings_service, config, database.background_jobs
+    )
     suggestions_service = SuggestionsService(database.suggestions, database.feedback)
     owner_reply_pairing_service = OwnerReplyPairingService(
         database.owner_reply_pairs,
@@ -120,7 +124,24 @@ def create_api_app(config: Config, database: Database, processing_status_service
     )
 
     dev_user_id = next(iter(config.admin_user_ids), None) if config.mini_app_dev else None
-    app = FastAPI(title="HelloMate Admin API")
+    background_worker = BackgroundWorker(
+        database.background_jobs,
+        {
+            "candidate_evaluation": lambda payload: candidate_evaluation_service.evaluate(
+                str(payload["candidate_id"])
+            ),
+        },
+    )
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI):
+        background_worker.start()
+        try:
+            yield
+        finally:
+            await background_worker.stop()
+
+    app = FastAPI(title="HelloMate Admin API", lifespan=lifespan)
     app.include_router(
         create_router(
             config.bot_token,
@@ -156,6 +177,7 @@ def create_api_app(config: Config, database: Database, processing_status_service
             owner_reply_pairing_service=owner_reply_pairing_service,
             learning_proposals_service=learning_proposals_service,
             candidate_evaluation_service=candidate_evaluation_service,
+            background_worker=background_worker,
             mini_app_dev=config.mini_app_dev,
             dev_user_id=dev_user_id,
         ),

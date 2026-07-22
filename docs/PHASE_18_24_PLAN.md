@@ -1,6 +1,6 @@
 # HelloMate — план развития Phase 18–24
 
-_Статус: Phase 18–21C реализованы и deployed; Phase 21D candidate lab реализован locally, credential-registry deployment pending; Phase 22A реализован locally; Phase 22B–24 proposal · Последнее обновление: 2026-07-21_
+_Статус: Phase 18–21C реализованы и deployed; Phase 21D candidate lab реализован locally, credential-registry deployment pending; Phase 22A–22B реализованы locally; Phase 22C–24 proposal · Последнее обновление: 2026-07-22_
 
 ## 1. Цель
 
@@ -570,6 +570,21 @@ Celery/Redis не добавляются без доказанной необх�
   transition. Payload предназначен для ссылок/ID, а не для копирования текста
   переписки.
 - Верификация: repository tests и offline Eval Lab regression gate прошли.
+
+### Фактический результат 22B (2026-07-22)
+
+- Добавлен single-process `BackgroundWorker`: один leased job за раз, graceful
+  shutdown через FastAPI lifespan, retry с exponential backoff и jitter,
+  durable retry/dead-letter transitions.
+- Candidate Lab evaluations теперь только ставятся в `background_jobs`; HTTP
+  запрос возвращает `queued` сразу, поэтому долгий provider run больше не
+  удерживает Mini App request и не приводит к Nginx 504.
+- Mini App показывает queued/running/completed/failed состояния, обновляет
+  результат во время фоновой проверки и позволяет удалить кандидата с
+  подтверждением.
+- Добавлен `/api/admin/background-jobs/health` с queue/dead-letter counts.
+- Верификация: Ruff, JavaScript syntax check, 30 focused tests и offline Eval
+  Lab regression gate прошли.
 
 ### 22C. Provider resilience
 
