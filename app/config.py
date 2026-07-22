@@ -62,6 +62,7 @@ class Config:
     llm_fallback_model: str
     llm_fallback_api_key: str
     reply_decision_shadow_enabled: bool
+    risk_routing_canary_enabled: bool
     ai_replies_enabled: bool
     mini_app_url: str
     mini_app_dev: bool
@@ -159,6 +160,9 @@ class Config:
         reply_decision_shadow_enabled = _parse_bool(
             os.getenv("REPLY_DECISION_SHADOW_ENABLED", "true"), default=True
         )
+        risk_routing_canary_enabled = _parse_bool(
+            os.getenv("RISK_ROUTING_CANARY_ENABLED", "false")
+        )
         ai_replies_enabled = _parse_bool(os.getenv("AI_REPLIES_ENABLED", "false"))
 
         mini_app_url = os.getenv("MINI_APP_URL", "").strip()
@@ -241,6 +245,7 @@ class Config:
             llm_fallback_model=llm_fallback_model,
             llm_fallback_api_key=llm_fallback_api_key,
             reply_decision_shadow_enabled=reply_decision_shadow_enabled,
+            risk_routing_canary_enabled=risk_routing_canary_enabled,
             ai_replies_enabled=ai_replies_enabled,
             mini_app_url=mini_app_url,
             mini_app_dev=mini_app_dev,

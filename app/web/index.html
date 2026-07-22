@@ -597,6 +597,12 @@
       <div class="persona-source" id="openness-effective-label" style="margin-top:4px"></div>
       <div class="divider"></div>
       <div class="toggle-row">
+        <span class="toggle-label">Безопасный canary для этого контакта</span>
+        <label class="toggle"><input type="checkbox" id="f-risk-canary"><span class="slider"></span></label>
+      </div>
+      <div class="persona-source" style="margin-top:2px">Только снижает автоматизацию при риске: авто → черновик или только владелец. Никогда не делает ответы более автоматическими.</div>
+      <div class="divider"></div>
+      <div class="toggle-row">
         <span class="toggle-label">Учиться моему стилю письма</span>
         <label class="toggle"><input type="checkbox" id="f-style-learning"><span class="slider"></span></label>
       </div>
@@ -1061,7 +1067,9 @@ async function openContact(userId) {
 
   // load user detail
   try {
-    const u = await get('/admin/users/' + userId);
+    const [u, riskCanary] = await Promise.all([
+      get('/admin/users/' + userId), get('/admin/risk-routing/contacts/' + userId),
+    ]);
     document.getElementById('detail-name').textContent = u.display_name || 'ID ' + u.user_id;
 
     // persona fields
@@ -1089,6 +1097,7 @@ async function openContact(userId) {
     document.getElementById('f-business-reply-mode').value = u.business_reply_mode || '';
     document.getElementById('f-openness').value = u.openness || '';
     document.getElementById('f-style-learning').checked = !!u.style_learning_enabled;
+    document.getElementById('f-risk-canary').checked = !!riskCanary.enabled;
     const effOpen = { open:'открыто', neutral:'нейтрально', reserved:'сдержанно' }[u.effective_openness] || u.effective_openness;
     document.getElementById('openness-effective-label').textContent = 'Сейчас действует: ' + effOpen;
 
@@ -1360,6 +1369,9 @@ async function saveContactSettings() {
       business_reply_mode:     mode || null,
       openness:                openness || null,
       style_learning_enabled:  document.getElementById('f-style-learning').checked,
+    });
+    await put('/admin/risk-routing/contacts/' + currentUserId, {
+      enabled: document.getElementById('f-risk-canary').checked,
     });
     toast('Настройки сохранены');
   } catch(e) {

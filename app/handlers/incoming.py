@@ -24,6 +24,7 @@ from app.services.profile_service import ProfileService
 from app.services.reply_debounce_service import ReplyDebounceService
 from app.services.reply_decision_service import ReplyDecisionService
 from app.services.reply_service import ReplyService
+from app.services.risk_routing_service import RiskRoutingService
 from app.services.settings_service import SettingsService
 from app.services.style_service import StyleService
 from app.services.summary_service import SummaryService
@@ -188,12 +189,15 @@ async def _process_incoming_text(
 
     reply_decision_service = context.bot_data.get("reply_decision_service")
     if isinstance(reply_decision_service, ReplyDecisionService):
-        reply_decision_service.record(
+        decision = reply_decision_service.record(
             contact_user_id,
             message_text,
             reply_mode,
             has_context=bool(reply_context),
         )
+        risk_routing_service = context.bot_data.get("risk_routing_service")
+        if decision is not None and isinstance(risk_routing_service, RiskRoutingService):
+            reply_mode = risk_routing_service.route_mode(contact_user_id, reply_mode, decision)
 
     if not isinstance(greeting_service, GreetingService):
         logger.error("Greeting service is not configured")

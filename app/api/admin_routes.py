@@ -35,6 +35,7 @@ from app.services.processing_status_service import ProcessingStatusService
 from app.services.profile_service import ProfileService
 from app.services.reply_decision_service import ReplyDecisionService
 from app.services.reply_service import ReplyService
+from app.services.risk_routing_service import RiskRoutingService
 from app.services.settings_service import SettingsService
 from app.services.suggestions_service import SuggestionsService
 from app.services.summary_service import SummaryService
@@ -155,6 +156,10 @@ class CandidateWriteRequest(BaseModel):
     credential_id: str = "default"
 
 
+class RiskCanaryContactRequest(BaseModel):
+    enabled: bool
+
+
 # ---------------------------------------------------------------------------
 # Router factory
 # ---------------------------------------------------------------------------
@@ -184,6 +189,7 @@ def create_admin_router(
     candidate_evaluation_service: CandidateEvaluationService | None = None,
     background_worker: BackgroundWorker | None = None,
     reply_decision_service: ReplyDecisionService | None = None,
+    risk_routing_service: RiskRoutingService | None = None,
     *,
     mini_app_dev: bool = False,
     dev_user_id: int | None = None,
@@ -352,6 +358,31 @@ def create_admin_router(
     @router.get("/reply-decisions")
     async def recent_reply_decisions(caller_id: int = AdminUser) -> list[dict[str, object]]:
         return reply_decision_service.recent() if reply_decision_service else []
+
+    @router.get("/risk-routing")
+    async def risk_routing_status(caller_id: int = AdminUser) -> dict[str, object]:
+        if risk_routing_service is None:
+            raise HTTPException(status_code=503, detail="Risk routing is not enabled")
+        return {
+            "enabled": risk_routing_service.enabled,
+            "contact_ids": sorted(risk_routing_service.contacts()),
+        }
+
+    @router.get("/risk-routing/contacts/{user_id}")
+    async def risk_routing_contact_status(
+        user_id: int, caller_id: int = AdminUser
+    ) -> dict[str, bool]:
+        if risk_routing_service is None:
+            raise HTTPException(status_code=503, detail="Risk routing is not enabled")
+        return {"enabled": risk_routing_service.is_contact_enabled(user_id)}
+
+    @router.put("/risk-routing/contacts/{user_id}")
+    async def update_risk_routing_contact(
+        user_id: int, request: RiskCanaryContactRequest, caller_id: int = AdminUser
+    ) -> dict[str, bool]:
+        if risk_routing_service is None:
+            raise HTTPException(status_code=503, detail="Risk routing is not enabled")
+        return {"enabled": risk_routing_service.set_contact(user_id, request.enabled)}
 
     @router.get("/eval-candidates/defaults")
     async def eval_candidate_defaults(caller_id: int = AdminUser) -> dict[str, object]:

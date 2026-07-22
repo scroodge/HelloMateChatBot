@@ -29,6 +29,7 @@ from app.services.processing_status_service import ProcessingStatusService
 from app.services.profile_service import ProfileService
 from app.services.reply_decision_service import ReplyDecisionService
 from app.services.reply_service import ReplyService
+from app.services.risk_routing_service import RiskRoutingService
 from app.services.settings_service import SettingsService
 from app.services.suggestions_service import SuggestionsService
 from app.services.summary_service import SummaryService
@@ -105,6 +106,9 @@ def create_api_app(config: Config, database: Database, processing_status_service
     )
     reply_decision_service = ReplyDecisionService(
         database.reply_decisions, enabled=config.reply_decision_shadow_enabled
+    )
+    risk_routing_service = RiskRoutingService(
+        settings_service, enabled=config.risk_routing_canary_enabled
     )
     suggestions_service = SuggestionsService(database.suggestions, database.feedback)
     owner_reply_pairing_service = OwnerReplyPairingService(
@@ -190,6 +194,7 @@ def create_api_app(config: Config, database: Database, processing_status_service
             candidate_evaluation_service=candidate_evaluation_service,
             background_worker=background_worker,
             reply_decision_service=reply_decision_service,
+            risk_routing_service=risk_routing_service,
             mini_app_dev=config.mini_app_dev,
             dev_user_id=dev_user_id,
         ),

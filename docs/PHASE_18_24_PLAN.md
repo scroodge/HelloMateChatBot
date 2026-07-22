@@ -1,6 +1,6 @@
 # HelloMate — план развития Phase 18–24
 
-_Статус: Phase 18–21C реализованы и deployed; Phase 21D candidate lab реализован locally, credential-registry deployment pending; Phase 22A–22C и Phase 23A–23B реализованы locally; Phase 23C–24 proposal · Последнее обновление: 2026-07-22_
+_Статус: Phase 18–21C реализованы и deployed; Phase 21D candidate lab реализован locally, credential-registry deployment pending; Phase 22A–22C и Phase 23A–23C реализованы locally; Phase 24 proposal · Последнее обновление: 2026-07-22_
 
 ## 1. Цель
 
@@ -678,6 +678,19 @@ provider failure               -> configured fallback or suggest
 Первый rollout — только shadow: решение рассчитывается и записывается, но не
 меняет фактический mode. После анализа false positives/negatives включается
 canary для выбранных контактов.
+
+### Фактический результат 23C (2026-07-22)
+
+- Добавлен opt-in canary через `RISK_ROUTING_CANARY_ENABLED=false` по умолчанию
+  и список выбранных контактов в Mini App.
+- Для canary-контакта routing может только понизить автоматизацию: `auto` →
+  `suggest` при medium risk или `auto` → `off` при high risk. Он никогда не
+  повышает `suggest`/`off` до `auto` и не переопределяет owner-only mode.
+- Контакт включается в разделе «Настройки контакта» переключателем
+  «Безопасный canary». Global flag выключает влияние immediately, сохраняя
+  статическое behavior и список выбранных контактов для последующего review.
+- Верификация: 42 hard-rule/canary and existing routing tests, Ruff, Mini App
+  JavaScript syntax и offline Eval Lab regression gate прошли.
 
 ### Definition of Done
 

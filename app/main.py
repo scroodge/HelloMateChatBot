@@ -76,6 +76,7 @@ from app.services.recall_service import RecallService
 from app.services.reply_debounce_service import ReplyDebounceService
 from app.services.reply_decision_service import ReplyDecisionService
 from app.services.reply_service import ReplyService
+from app.services.risk_routing_service import RiskRoutingService
 from app.services.settings_service import SettingsService
 from app.services.style_service import StyleService
 from app.services.suggestions_service import SuggestionsService
@@ -138,6 +139,9 @@ def build_application(config: Config, database: Database, processing_status_serv
     reply_debounce_service = ReplyDebounceService(config.reply_debounce_seconds)
     reply_decision_service = ReplyDecisionService(
         database.reply_decisions, enabled=config.reply_decision_shadow_enabled
+    )
+    risk_routing_service = RiskRoutingService(
+        settings_service, enabled=config.risk_routing_canary_enabled
     )
     summary_service = SummaryService(
         memory_service=memory_service,
@@ -221,6 +225,7 @@ def build_application(config: Config, database: Database, processing_status_serv
     application.bot_data["business_service"] = business_service
     application.bot_data["reply_debounce_service"] = reply_debounce_service
     application.bot_data["reply_decision_service"] = reply_decision_service
+    application.bot_data["risk_routing_service"] = risk_routing_service
     application.bot_data["summary_service"] = summary_service
     application.bot_data["facts_service"] = facts_service
     application.bot_data["style_service"] = style_service
