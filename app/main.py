@@ -64,7 +64,7 @@ from app.services.greeting_rules_service import GreetingRulesService
 from app.services.greeting_service import GreetingService
 from app.services.learning_proposals_service import LearningProposalsService
 from app.services.llm import LLMService
-from app.services.llm.factory import build_llm_provider
+from app.services.llm.factory import build_fallback_llm_provider, build_llm_provider
 from app.services.memory_service import MemoryService
 from app.services.mood_service import MoodService
 from app.services.owner_reply_pairing_service import OwnerReplyPairingService
@@ -74,6 +74,7 @@ from app.services.profile_service import ProfileService
 from app.services.rag_service import RAGService
 from app.services.recall_service import RecallService
 from app.services.reply_debounce_service import ReplyDebounceService
+from app.services.reply_decision_service import ReplyDecisionService
 from app.services.reply_service import ReplyService
 from app.services.settings_service import SettingsService
 from app.services.style_service import StyleService
@@ -113,7 +114,8 @@ def build_application(config: Config, database: Database, processing_status_serv
     mood_service = MoodService(database.moods)
     memory_service = MemoryService(database.memory, config.memory_window_size)
     llm_provider = build_llm_provider(config)
-    llm_service = LLMService(llm_provider, database.feedback)
+    fallback_llm_provider = build_fallback_llm_provider(config)
+    llm_service = LLMService(llm_provider, database.feedback, fallback_llm_provider)
     embedding_service = EmbeddingService(
         base_url=config.llm_base_url,
         model=config.llm_embedding_model,
@@ -134,6 +136,9 @@ def build_application(config: Config, database: Database, processing_status_serv
     )
     business_service = BusinessService(database.business)
     reply_debounce_service = ReplyDebounceService(config.reply_debounce_seconds)
+    reply_decision_service = ReplyDecisionService(
+        database.reply_decisions, enabled=config.reply_decision_shadow_enabled
+    )
     summary_service = SummaryService(
         memory_service=memory_service,
         llm_service=llm_service,
@@ -215,6 +220,7 @@ def build_application(config: Config, database: Database, processing_status_serv
     application.bot_data["memory_service"] = memory_service
     application.bot_data["business_service"] = business_service
     application.bot_data["reply_debounce_service"] = reply_debounce_service
+    application.bot_data["reply_decision_service"] = reply_decision_service
     application.bot_data["summary_service"] = summary_service
     application.bot_data["facts_service"] = facts_service
     application.bot_data["style_service"] = style_service

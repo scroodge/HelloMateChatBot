@@ -488,6 +488,11 @@
       <div class="activity-lede">Каждое изменение показывает основание и применяется только после подтверждения.</div>
       <div id="activity-proposals" style="margin-top:10px"></div>
     </div>
+    <div class="card" id="activity-decisions-card" style="display:none">
+      <div class="card-title">Риск-проверка, shadow</div>
+      <div class="activity-lede">Пока только наблюдение: рекомендации не меняют режим ответа контакту.</div>
+      <div id="activity-decisions" style="margin-top:10px"></div>
+    </div>
     <div class="card">
       <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
         <span>Последние генерации</span>
@@ -1920,17 +1925,35 @@ async function loadActivity() {
   const recentEl = document.getElementById('activity-recent');
   if (!liveEl || !recentEl) return;
   try {
-    const [activity, pairs, proposals] = await Promise.all([
-      get('/admin/activity'), get('/admin/owner-reply-pairs'), get('/admin/learning-proposals'),
+    const [activity, pairs, proposals, decisions] = await Promise.all([
+      get('/admin/activity'), get('/admin/owner-reply-pairs'), get('/admin/learning-proposals'), get('/admin/reply-decisions'),
     ]);
     renderActivityLive(activity.live || []);
     renderActivityRecent(activity.recent || []);
     renderOwnerReplyPairs(pairs || []);
     renderLearningProposals(proposals || []);
+    renderReplyDecisions(decisions || []);
   } catch (e) {
     liveEl.innerHTML = `<div class="error">Не удалось загрузить статус: ${escHtml(e.message)}</div>`;
     recentEl.innerHTML = '';
   }
+}
+
+function renderReplyDecisions(items) {
+  const card = document.getElementById('activity-decisions-card');
+  const el = document.getElementById('activity-decisions');
+  if (!items.length) { card.style.display = 'none'; return; }
+  card.style.display = '';
+  const labels = { auto: 'авто', suggest: 'черновик', off: 'только владелец' };
+  el.innerHTML = items.slice(0, 10).map(item => {
+    const isDivergent = item.is_divergent;
+    const mark = isDivergent ? 'live' : 'ok';
+    const outcome = isDivergent
+      ? `Сейчас: ${labels[item.actual_mode] || item.actual_mode}; рекомендация: ${labels[item.recommended_mode] || item.recommended_mode}`
+      : `Режим совпадает: ${labels[item.actual_mode] || item.actual_mode}`;
+    const reasons = (item.reasons || []).join(' · ').replaceAll('_', ' ');
+    return `<div class="activity-row"><span class="activity-mark ${mark}"></span><div class="activity-copy"><div class="activity-title">${escHtml(outcome)}</div><div class="activity-meta">Риск: ${escHtml(item.risk_level)} · ${escHtml(reasons)}</div></div></div>`;
+  }).join('');
 }
 
 // ── Learned style ────────────────────────────────────────────────────────────

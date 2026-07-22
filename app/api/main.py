@@ -27,6 +27,7 @@ from app.services.owner_reply_pairing_service import OwnerReplyPairingService
 from app.services.persona_service import PersonaService
 from app.services.processing_status_service import ProcessingStatusService
 from app.services.profile_service import ProfileService
+from app.services.reply_decision_service import ReplyDecisionService
 from app.services.reply_service import ReplyService
 from app.services.settings_service import SettingsService
 from app.services.suggestions_service import SuggestionsService
@@ -101,6 +102,9 @@ def create_api_app(config: Config, database: Database, processing_status_service
     )
     candidate_evaluation_service = CandidateEvaluationService(
         settings_service, config, database.background_jobs
+    )
+    reply_decision_service = ReplyDecisionService(
+        database.reply_decisions, enabled=config.reply_decision_shadow_enabled
     )
     suggestions_service = SuggestionsService(database.suggestions, database.feedback)
     owner_reply_pairing_service = OwnerReplyPairingService(
@@ -185,6 +189,7 @@ def create_api_app(config: Config, database: Database, processing_status_service
             learning_proposals_service=learning_proposals_service,
             candidate_evaluation_service=candidate_evaluation_service,
             background_worker=background_worker,
+            reply_decision_service=reply_decision_service,
             mini_app_dev=config.mini_app_dev,
             dev_user_id=dev_user_id,
         ),

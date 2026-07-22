@@ -61,6 +61,7 @@ class Config:
     llm_fallback_base_url: str
     llm_fallback_model: str
     llm_fallback_api_key: str
+    reply_decision_shadow_enabled: bool
     ai_replies_enabled: bool
     mini_app_url: str
     mini_app_dev: bool
@@ -155,6 +156,9 @@ class Config:
         llm_fallback_api_key = os.getenv("LLM_FALLBACK_API_KEY", "").strip()
         if llm_fallback_provider and not llm_fallback_model:
             raise ConfigError("LLM_FALLBACK_MODEL is required when a fallback is enabled.")
+        reply_decision_shadow_enabled = _parse_bool(
+            os.getenv("REPLY_DECISION_SHADOW_ENABLED", "true"), default=True
+        )
         ai_replies_enabled = _parse_bool(os.getenv("AI_REPLIES_ENABLED", "false"))
 
         mini_app_url = os.getenv("MINI_APP_URL", "").strip()
@@ -236,6 +240,7 @@ class Config:
             llm_fallback_base_url=llm_fallback_base_url,
             llm_fallback_model=llm_fallback_model,
             llm_fallback_api_key=llm_fallback_api_key,
+            reply_decision_shadow_enabled=reply_decision_shadow_enabled,
             ai_replies_enabled=ai_replies_enabled,
             mini_app_url=mini_app_url,
             mini_app_dev=mini_app_dev,

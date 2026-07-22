@@ -297,6 +297,24 @@ background_jobs = Table(
     Index("idx_background_jobs_lease", "status", "lease_expires_at"),
 )
 
+reply_decisions = Table(
+    "reply_decisions",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("user_id", Integer, nullable=False),
+    Column("intent", Text, nullable=False),
+    Column("risk_level", Text, nullable=False),
+    Column("memory_confidence", Text, nullable=False),
+    Column("requires_owner_knowledge", Boolean, nullable=False),
+    Column("requires_external_action", Boolean, nullable=False),
+    Column("recommended_mode", Text, nullable=False),
+    Column("actual_mode", Text, nullable=False),
+    Column("reasons", Text, nullable=False),
+    Column("created_at", Text, nullable=False),
+    Index("idx_reply_decisions_created", "created_at"),
+    Index("idx_reply_decisions_user_created", "user_id", "created_at"),
+)
+
 generation_runs = Table(
     "generation_runs",
     metadata,

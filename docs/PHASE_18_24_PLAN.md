@@ -1,6 +1,6 @@
 # HelloMate — план развития Phase 18–24
 
-_Статус: Phase 18–21C реализованы и deployed; Phase 21D candidate lab реализован locally, credential-registry deployment pending; Phase 22A–22C реализованы locally; Phase 23–24 proposal · Последнее обновление: 2026-07-22_
+_Статус: Phase 18–21C реализованы и deployed; Phase 21D candidate lab реализован locally, credential-registry deployment pending; Phase 22A–22C и Phase 23A–23B реализованы locally; Phase 23C–24 proposal · Последнее обновление: 2026-07-22_
 
 ## 1. Цель
 
@@ -653,6 +653,18 @@ Hard rules имеют приоритет над model classifier.
 - запрос на внешнее действие;
 - утверждение о текущем состоянии/местоположении владельца;
 - недостаточный или противоречивый контекст.
+
+### Фактический результат 23A–23B (2026-07-22)
+
+- Добавлен explainable `ReplyDecision` с intent, risk level, memory confidence,
+  owner/external action flags, recommended mode и списком hard-rule reasons.
+- Детерминированные hard rules покрывают деньги, medical/legal topics, личные
+  данные, external actions, owner availability/promises и emotional conflict.
+- Решение записывается в shadow-only `reply_decisions` без текста входящего
+  сообщения. `/api/admin/reply-decisions` показывает actual/recommended mode и
+  `is_divergent` для анализа будущего canary.
+- `REPLY_DECISION_SHADOW_ENABLED=false` отключает запись и оставляет полностью
+  статическое legacy behavior. При включённом flag routing всё ещё не меняется.
 
 ### 23C. Routing
 

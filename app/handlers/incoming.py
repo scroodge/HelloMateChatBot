@@ -19,9 +19,10 @@ from app.services.event_service import (
 from app.services.greeting_rules_service import GreetingRulesService
 from app.services.greeting_service import GreetingService
 from app.services.memory_service import MemoryService
-from app.services.profile_service import ProfileService
 from app.services.processing_status_service import ProcessingStatusService
+from app.services.profile_service import ProfileService
 from app.services.reply_debounce_service import ReplyDebounceService
+from app.services.reply_decision_service import ReplyDecisionService
 from app.services.reply_service import ReplyService
 from app.services.settings_service import SettingsService
 from app.services.style_service import StyleService
@@ -185,6 +186,15 @@ async def _process_incoming_text(
             pairing_service.observe_owner_reply(owner_message)
         return
 
+    reply_decision_service = context.bot_data.get("reply_decision_service")
+    if isinstance(reply_decision_service, ReplyDecisionService):
+        reply_decision_service.record(
+            contact_user_id,
+            message_text,
+            reply_mode,
+            has_context=bool(reply_context),
+        )
+
     if not isinstance(greeting_service, GreetingService):
         logger.error("Greeting service is not configured")
         if processing_status is not None and status_token is not None:
@@ -193,7 +203,9 @@ async def _process_incoming_text(
     if not isinstance(greeting_text, str):
         logger.error("Greeting text is not configured")
         if processing_status is not None and status_token is not None:
-            processing_status.set_failed(contact_user_id, status_token, "Текст приветствия недоступен")
+            processing_status.set_failed(
+                contact_user_id, status_token, "Текст приветствия недоступен"
+            )
         return
 
     # A greeting is an automatic message to the contact. Outside "auto" mode the
@@ -298,7 +310,9 @@ async def _deliver_ai_reply(
 
     if not isinstance(reply_service, ReplyService):
         if processing_status is not None and status_token is not None:
-            processing_status.set_failed(contact_user_id, status_token, "AI replies are unavailable")
+            processing_status.set_failed(
+                contact_user_id, status_token, "AI replies are unavailable"
+            )
         return
 
     if processing_status is not None and status_token is not None:
@@ -320,7 +334,9 @@ async def _deliver_ai_reply(
             if processing_status is not None and status_token is not None:
                 processing_status.clear(contact_user_id, status_token)
         elif processing_status is not None and status_token is not None:
-            processing_status.set_failed(contact_user_id, status_token, "Не удалось создать черновик")
+            processing_status.set_failed(
+                contact_user_id, status_token, "Не удалось создать черновик"
+            )
         return
 
     # auto (default)
