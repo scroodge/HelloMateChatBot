@@ -8,6 +8,7 @@ from typing import Protocol
 from uuid import uuid4
 
 from app.models.generation import GenerationRequest, GenerationResult
+from app.services.llm.http_client import ProviderRequestError
 from app.services.prompt_registry import (
     BASELINE_CONTEXT_POLICY_VERSION,
     BASELINE_PROMPT_VERSION,
@@ -25,35 +26,43 @@ class LLMProvider(Protocol):
 class LLMService:
     """Facade over a configured LLM provider."""
 
-    def __init__(self, provider: LLMProvider, feedback_repository: object | None = None) -> None:
+    def __init__(
+        self,
+        provider: LLMProvider,
+        feedback_repository: object | None = None,
+        fallback_provider: LLMProvider | None = None,
+    ) -> None:
         self.provider = provider
         self.feedback_repository = feedback_repository
+        self.fallback_provider = fallback_provider
 
     async def generate(self, request: GenerationRequest) -> GenerationResult:
         """Generate and persist metadata only, never the prompt or reply text."""
         trace_id = uuid4().hex
         started_at = datetime.now().astimezone()
         started = monotonic()
+        fallback_chain: str | None = None
         try:
             result = await self.provider.generate(request)
+        except ProviderRequestError as exc:
+            if not exc.retryable or self.fallback_provider is None:
+                self._record_error(trace_id, request, started_at, started, exc)
+                raise
+            try:
+                result = await self.fallback_provider.generate(request)
+            except Exception as fallback_exc:
+                self._record_error(trace_id, request, started_at, started, fallback_exc)
+                raise
+            fallback_chain = self._fallback_chain()
         except Exception as exc:
-            self._record_trace(
-                trace_id,
-                request,
-                started_at,
-                round((monotonic() - started) * 1000),
-                provider=getattr(
-                    self.provider, "provider_name", self.provider.__class__.__name__.lower()
-                ),
-                model=getattr(self.provider, "model", "unknown"),
-                error_code=exc.__class__.__name__,
-            )
+            self._record_error(trace_id, request, started_at, started, exc)
             raise
+        total_latency_ms = round((monotonic() - started) * 1000)
         self._record_trace(
             trace_id,
             request,
             started_at,
-            result.latency_ms,
+            total_latency_ms,
             provider=result.provider,
             model=result.model,
             response_id=result.response_id,
@@ -61,6 +70,7 @@ class LLMService:
             output_tokens=result.output_tokens,
             cached_tokens=result.cached_tokens,
             finish_reason=result.finish_reason,
+            fallback_chain=fallback_chain,
         )
         return GenerationResult(
             text=result.text,
@@ -71,7 +81,7 @@ class LLMService:
             output_tokens=result.output_tokens,
             cached_tokens=result.cached_tokens,
             finish_reason=result.finish_reason,
-            latency_ms=result.latency_ms,
+            latency_ms=total_latency_ms,
             trace_id=trace_id,
         )
 
@@ -102,10 +112,39 @@ class LLMService:
                 "latency_ms": latency_ms,
                 "finish_reason": metadata.pop("finish_reason", None),
                 "error_code": metadata.pop("error_code", None),
-                "fallback_chain": None,
+                "fallback_chain": metadata.pop("fallback_chain", None),
                 "created_at": created_at.isoformat(),
             }
         )
+
+    def _record_error(
+        self,
+        trace_id: str,
+        request: GenerationRequest,
+        started_at: datetime,
+        started: float,
+        exc: Exception,
+    ) -> None:
+        self._record_trace(
+            trace_id,
+            request,
+            started_at,
+            round((monotonic() - started) * 1000),
+            provider=getattr(
+                self.provider, "provider_name", self.provider.__class__.__name__.lower()
+            ),
+            model=getattr(self.provider, "model", "unknown"),
+            error_code=exc.__class__.__name__,
+        )
+
+    def _fallback_chain(self) -> str:
+        primary_name = getattr(self.provider, "provider_name", self.provider.__class__.__name__)
+        primary_model = getattr(self.provider, "model", "unknown")
+        fallback = self.fallback_provider
+        assert fallback is not None
+        fallback_name = getattr(fallback, "provider_name", fallback.__class__.__name__)
+        fallback_model = getattr(fallback, "model", "unknown")
+        return f"{primary_name}/{primary_model} -> {fallback_name}/{fallback_model}"
 
     async def complete(
         self,

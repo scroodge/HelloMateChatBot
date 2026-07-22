@@ -54,6 +54,13 @@ class Config:
     llm_api_key: str
     llm_max_tokens: int
     llm_temperature: float
+    llm_timeout_seconds: float
+    llm_max_concurrency: int
+    llm_max_retries: int
+    llm_fallback_provider: str
+    llm_fallback_base_url: str
+    llm_fallback_model: str
+    llm_fallback_api_key: str
     ai_replies_enabled: bool
     mini_app_url: str
     mini_app_dev: bool
@@ -131,6 +138,23 @@ class Config:
         llm_temperature = float(os.getenv("LLM_TEMPERATURE", "0.7"))
         if not 0.0 <= llm_temperature <= 2.0:
             raise ConfigError("LLM_TEMPERATURE must be between 0.0 and 2.0.")
+        llm_timeout_seconds = float(os.getenv("LLM_TIMEOUT_SECONDS", "60"))
+        if llm_timeout_seconds <= 0:
+            raise ConfigError("LLM_TIMEOUT_SECONDS must be positive.")
+        llm_max_concurrency = int(os.getenv("LLM_MAX_CONCURRENCY", "4"))
+        if llm_max_concurrency < 1:
+            raise ConfigError("LLM_MAX_CONCURRENCY must be at least 1.")
+        llm_max_retries = int(os.getenv("LLM_MAX_RETRIES", "1"))
+        if llm_max_retries < 0:
+            raise ConfigError("LLM_MAX_RETRIES must be >= 0.")
+        llm_fallback_provider = os.getenv("LLM_FALLBACK_PROVIDER", "").strip().lower()
+        if llm_fallback_provider and llm_fallback_provider not in {"ollama", "openai"}:
+            raise ConfigError("LLM_FALLBACK_PROVIDER must be ollama, openai, or empty.")
+        llm_fallback_base_url = os.getenv("LLM_FALLBACK_BASE_URL", "").strip()
+        llm_fallback_model = os.getenv("LLM_FALLBACK_MODEL", "").strip()
+        llm_fallback_api_key = os.getenv("LLM_FALLBACK_API_KEY", "").strip()
+        if llm_fallback_provider and not llm_fallback_model:
+            raise ConfigError("LLM_FALLBACK_MODEL is required when a fallback is enabled.")
         ai_replies_enabled = _parse_bool(os.getenv("AI_REPLIES_ENABLED", "false"))
 
         mini_app_url = os.getenv("MINI_APP_URL", "").strip()
@@ -205,6 +229,13 @@ class Config:
             llm_api_key=llm_api_key,
             llm_max_tokens=llm_max_tokens,
             llm_temperature=llm_temperature,
+            llm_timeout_seconds=llm_timeout_seconds,
+            llm_max_concurrency=llm_max_concurrency,
+            llm_max_retries=llm_max_retries,
+            llm_fallback_provider=llm_fallback_provider,
+            llm_fallback_base_url=llm_fallback_base_url,
+            llm_fallback_model=llm_fallback_model,
+            llm_fallback_api_key=llm_fallback_api_key,
             ai_replies_enabled=ai_replies_enabled,
             mini_app_url=mini_app_url,
             mini_app_dev=mini_app_dev,

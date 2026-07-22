@@ -5,6 +5,7 @@ from __future__ import annotations
 import httpx
 import pytest
 
+from app.services.llm.http_client import ProviderRequestError
 from app.services.llm.ollama_provider import OllamaProvider
 from app.services.llm.openai_provider import OpenAIProvider
 
@@ -117,3 +118,64 @@ async def test_openai_gpt5_provider_uses_max_completion_tokens(
     monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: MockClient())
     result = await provider.complete([{"role": "user", "content": "Hi"}])
     assert result == "Hello from GPT-5"
+
+
+@pytest.mark.asyncio
+async def test_provider_retries_temporary_network_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    provider = OllamaProvider("http://ollama", "llama3.2", 128, max_retries=1)
+    calls = 0
+
+    class MockResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return {"message": {"content": "Recovered"}}
+
+    class MockClient:
+        async def post(self, url: str, json: dict[str, object]) -> MockResponse:
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                raise httpx.ConnectError("connection refused")
+            return MockResponse()
+
+    async def no_sleep(_: float) -> None:
+        return None
+
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: MockClient())
+    monkeypatch.setattr("app.services.llm.http_client.asyncio.sleep", no_sleep)
+
+    result = await provider.complete([{"role": "user", "content": "Hi"}])
+
+    assert result == "Recovered"
+    assert calls == 2
+    assert provider.health()["available"] is True
+
+
+@pytest.mark.asyncio
+async def test_provider_does_not_retry_permanent_http_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = OpenAIProvider(
+        "https://api.openai.com", "gpt-4o-mini", "secret", 128, max_retries=2
+    )
+    calls = 0
+
+    class MockClient:
+        async def post(
+            self, url: str, json: dict[str, object], headers: dict[str, str]
+        ) -> httpx.Response:
+            nonlocal calls
+            calls += 1
+            request = httpx.Request("POST", url)
+            return httpx.Response(401, request=request)
+
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: MockClient())
+
+    with pytest.raises(ProviderRequestError) as error:
+        await provider.complete([{"role": "user", "content": "Hi"}])
+
+    assert error.value.retryable is False
+    assert error.value.status_code == 401
+    assert calls == 1

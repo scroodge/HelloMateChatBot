@@ -109,6 +109,7 @@ class CandidateEvaluationService:
             return None
         candidate["status"] = "running"
         self._save(items)
+        provider: object | None = None
         try:
             cases = load_cases(Path("evals/datasets/regression.jsonl"))
             provider = self._provider(candidate)
@@ -122,6 +123,13 @@ class CandidateEvaluationService:
                 "hard_failure_count": 1,
                 "error": str(exc)[:500],
             }
+        finally:
+            close_provider = getattr(provider, "aclose", None)
+            if close_provider is not None:
+                try:
+                    await close_provider()
+                except Exception:
+                    pass
         candidate["summary"] = summary
         candidate["status"] = (
             "passed"

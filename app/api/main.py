@@ -58,11 +58,12 @@ def create_api_app(config: Config, database: Database, processing_status_service
 
     from app.services.embedding_service import EmbeddingService
     from app.services.llm import LLMService
-    from app.services.llm.factory import build_llm_provider
+    from app.services.llm.factory import build_fallback_llm_provider, build_llm_provider
     from app.services.rag_service import RAGService
 
     llm_provider = build_llm_provider(config)
-    llm_service = LLMService(llm_provider, database.feedback)
+    fallback_llm_provider = build_fallback_llm_provider(config)
+    llm_service = LLMService(llm_provider, database.feedback, fallback_llm_provider)
     embedding_service = EmbeddingService(
         base_url=config.llm_base_url,
         model=config.llm_embedding_model,
@@ -140,6 +141,12 @@ def create_api_app(config: Config, database: Database, processing_status_service
             yield
         finally:
             await background_worker.stop()
+            close_provider = getattr(llm_provider, "aclose", None)
+            if close_provider is not None:
+                await close_provider()
+            close_fallback = getattr(fallback_llm_provider, "aclose", None)
+            if close_fallback is not None:
+                await close_fallback()
 
     app = FastAPI(title="HelloMate Admin API", lifespan=lifespan)
     app.include_router(

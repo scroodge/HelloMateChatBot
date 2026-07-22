@@ -8,6 +8,7 @@ from app.database.db import Database
 from app.database.schema import feedback_events, generation_runs, suggestion_outcomes
 from app.models.generation import GenerationRequest, GenerationResult
 from app.services.llm import LLMService
+from app.services.llm.http_client import ProviderRequestError
 from app.services.suggestions_service import SuggestionsService
 
 
@@ -27,6 +28,19 @@ class _Provider:
             finish_reason="stop",
             latency_ms=42,
         )
+
+
+class _RetryableFailureProvider(_Provider):
+    provider_name = "primary"
+    model = "primary-model"
+
+    async def generate(self, request: GenerationRequest) -> GenerationResult:
+        raise ProviderRequestError("temporary outage", retryable=True)
+
+
+class _FallbackProvider(_Provider):
+    provider_name = "fallback"
+    model = "fallback-model"
 
 
 async def test_generation_trace_records_metadata_but_not_prompt_or_reply(tmp_path) -> None:
@@ -50,6 +64,28 @@ async def test_generation_trace_records_metadata_but_not_prompt_or_reply(tmp_pat
     assert row.input_tokens == 11
     assert "sensitive prompt" not in str(dict(row._mapping))
     assert "private reply" not in str(dict(row._mapping))
+
+
+async def test_retryable_primary_failure_uses_explicit_fallback(tmp_path) -> None:
+    with Database(f"sqlite:///{tmp_path / 'fallback.db'}") as db:
+        service = LLMService(
+            _RetryableFailureProvider(), db.feedback, fallback_provider=_FallbackProvider()
+        )
+        result = await service.generate(
+            GenerationRequest(
+                messages=[{"role": "user", "content": "private input"}],
+                purpose="reply",
+                contact_user_id=42,
+                prompt_version="v1",
+                context_policy_version="v1",
+            )
+        )
+        with db.engine.connect() as conn:
+            row = conn.execute(select(generation_runs)).one()
+
+    assert result.provider == "fallback"
+    assert row.provider == "fallback"
+    assert row.fallback_chain == "primary/primary-model -> fallback/fallback-model"
 
 
 def test_suggestion_feedback_is_append_only_and_captures_edit_outcome(tmp_path) -> None:

@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import httpx
-
 from app.models.generation import GenerationRequest, GenerationResult
+from app.services.llm.http_client import ResilientHttpClient
 
 
 class OllamaProvider:
@@ -17,12 +16,24 @@ class OllamaProvider:
     provider_name = "ollama"
 
     def __init__(
-        self, base_url: str, model: str, max_tokens: int, temperature: float = 0.7
+        self,
+        base_url: str,
+        model: str,
+        max_tokens: int,
+        temperature: float = 0.7,
+        timeout_seconds: float = 60.0,
+        max_concurrency: int = 4,
+        max_retries: int = 1,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.max_tokens = max_tokens
         self.temperature = temperature
+        self._http = ResilientHttpClient(
+            timeout_seconds=timeout_seconds,
+            max_concurrency=max_concurrency,
+            max_retries=max_retries,
+        )
 
     async def generate(self, request: GenerationRequest) -> GenerationResult:
         from time import monotonic
@@ -38,10 +49,8 @@ class OllamaProvider:
                 "stop": self._STOP,
             },
         }
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(f"{self.base_url}/api/chat", json=payload)
-            response.raise_for_status()
-            data = response.json()
+        response = await self._http.post(f"{self.base_url}/api/chat", json=payload)
+        data = response.json()
         message = data.get("message", {})
         content = message.get("content")
         if not isinstance(content, str) or not content.strip():
@@ -64,11 +73,17 @@ class OllamaProvider:
     async def transcribe(self, audio_bytes: bytes, model: str = "whisper") -> str:
         files = {"file": ("voice.ogg", audio_bytes, "audio/ogg")}
         data = {"model": model}
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            response = await client.post(f"{self.base_url}/api/transcribe", data=data, files=files)
-            response.raise_for_status()
-            payload = response.json()
+        response = await self._http.post(
+            f"{self.base_url}/api/transcribe", data=data, files=files
+        )
+        payload = response.json()
         text = payload.get("text")
         if not isinstance(text, str) or not text.strip():
             raise RuntimeError("Ollama transcription returned empty text.")
         return text.strip()
+
+    async def aclose(self) -> None:
+        await self._http.aclose()
+
+    def health(self) -> dict[str, object]:
+        return self._http.health()

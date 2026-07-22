@@ -1,6 +1,6 @@
 # HelloMate — план развития Phase 18–24
 
-_Статус: Phase 18–21C реализованы и deployed; Phase 21D candidate lab реализован locally, credential-registry deployment pending; Phase 22A–22B реализованы locally; Phase 22C–24 proposal · Последнее обновление: 2026-07-22_
+_Статус: Phase 18–21C реализованы и deployed; Phase 21D candidate lab реализован locally, credential-registry deployment pending; Phase 22A–22C реализованы locally; Phase 23–24 proposal · Последнее обновление: 2026-07-22_
 
 ## 1. Цель
 
@@ -595,6 +595,20 @@ Celery/Redis не добавляются без доказанной необх�
 - provider health;
 - контролируемый fallback;
 - различение retryable и permanent errors.
+
+### Фактический результат 22C (2026-07-22)
+
+- Ollama и OpenAI-compatible providers используют reusable bounded HTTP client
+  с отдельным connect/read timeout, ограничением одновременных запросов,
+  exponential retry и jitter для transient network, rate-limit и 5xx ошибок.
+- После повторяющихся transient failures включается короткий circuit breaker;
+  permanent 4xx ошибки не повторяются.
+- Добавлен opt-in controlled fallback через `LLM_FALLBACK_*`: он используется
+  только после retryable failure primary provider. Пустая настройка сохраняет
+  прежний primary-only routing.
+- Provider lifecycle закрывает HTTP clients при shutdown и после candidate eval;
+  generation trace сохраняет fallback chain без prompt или текста ответа.
+- Верификация: Ruff, 27 focused tests и offline Eval Lab regression gate прошли.
 
 ### Definition of Done
 
