@@ -336,7 +336,7 @@ def test_learning_proposal_api_requires_explicit_approval(tmp_path) -> None:
     assert approved.json() == {"approved": True}
 
 
-def test_contact_detail_exposes_applied_style_layers(tmp_path) -> None:
+def test_contact_detail_exposes_only_its_contact_style(tmp_path) -> None:
     from dataclasses import replace
 
     with Database(f"sqlite:///{tmp_path / 'style-layers-api.db'}") as db:
@@ -358,11 +358,7 @@ def test_contact_detail_exposes_applied_style_layers(tmp_path) -> None:
         response = client.get("/api/admin/users/7431073781")
 
     assert response.status_code == 200
-    assert response.json()["style_profiles"] == {
-        "global": "общая манера",
-        "relationship": "манера друзей",
-        "contact": "личная деталь",
-    }
+    assert response.json()["style_profiles"] == {"contact": "личная деталь"}
 
 
 def test_persona_too_long_returns_422_not_500(tmp_path) -> None:

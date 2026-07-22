@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 PERSONA_PROMPT_MAX_LENGTH = 8000
 DEFAULT_PERSONA_BOT_SETTING = "default_persona"
 BUSINESS_REPLY_MODE_SETTING = "business_reply_mode"
-VALID_BUSINESS_REPLY_MODES = {"auto", "suggest", "off"}
+VALID_BUSINESS_REPLY_MODES = {"suggest", "off"}
 DEFAULT_BUSINESS_REPLY_MODE = "suggest"
 
 OPENNESS_SETTING = "openness"
@@ -217,7 +217,11 @@ class SettingsService:
         return global_enabled and self.get_user_settings(user_id).greeting_enabled
 
     def get_business_reply_mode(self, user_id: int) -> str:
-        """Return effective business reply mode: per-contact → global → default."""
+        """Return effective business reply mode: per-contact → global → default.
+
+        Automatic sending is intentionally unsupported. Legacy ``auto`` values
+        fall back to ``suggest`` rather than sending in the owner's name.
+        """
 
         per_contact = self.get_user_settings(user_id).business_reply_mode
         if per_contact and per_contact in VALID_BUSINESS_REPLY_MODES:

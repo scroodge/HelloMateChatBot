@@ -11,8 +11,12 @@ Telegram: [@HelloMateChatBot](https://t.me/HelloMateChatBot)
 
 HelloMate is an open-source Telegram companion bot. Its primary mode is **Telegram
 Business**: the owner connects the bot to their account, and it replies **in the
-owner's name** in private chats with contacts — each contact gets their own AI
-persona, memory, and settings.
+owner's name as a **private draft** — each contact gets their own AI persona,
+memory, and settings. The owner always decides whether to send anything.
+
+For a non-technical explanation of the owner-controlled, draft-only workflow,
+per-contact style learning, and model comparisons, see
+[How HelloMate works](docs/HOW_HELLOMATE_WORKS.md).
 
 The bot also works as a standalone 1-to-1 companion when someone chats with it
 directly. Features include daily greetings, mood tracking, conversation memory,
@@ -32,7 +36,7 @@ console, reply debouncing for rapid short messages, and a personal RAG knowledge
 - **Openness dial** — per-contact control of how much to disclose (`open` / `neutral` / `reserved`); applied last so it overrides persona and tone
 - **Owner style learning (opt-in)** — the bot can learn the owner's real writing manner per contact and mimic it; learns only from genuine owner replies, never from AI-generated ones
 - **Few-shot examples** — per-contact curated (contact message → reply) pairs, editable in the Mini App or saved straight from the Playground; injected into the prompt as a tone/format guide. Both **positive** (ideal replies to emulate) and **negative** (anti-patterns to avoid), up to 10 of each per contact
-- **Business reply modes** — per-contact and global: suggest a draft, auto-reply, or stay silent
+- **Business reply modes** — per-contact and global: suggest a draft or stay silent
 - **Suggest Inbox** — in suggest mode, drafts are stored **only** in the Mini App inbox (no chat message): review, edit inline, copy, save as a positive or negative example, or dismiss (with a pending-count badge). Voice messages are drafted into the inbox too
 - **Generation traces and owner feedback** — provider-neutral generation metadata (model, usage, finish reason, latency) is stored without raw prompts; Suggest Inbox records an append-only decision lifecycle and exposes feedback/provider analytics
 - **Owner personal assistant** — use the direct bot chat as a personal assistant via `/assistant`: multiple named personas (e.g. an English teacher), each with its own isolated persistent memory, fully separate from contact data. Owner-only
@@ -167,8 +171,8 @@ in the managed chat.
 
 | Who writes | What the bot does |
 | --- | --- |
-| **Contact** | Buffers rapid messages (`REPLY_DEBOUNCE_SECONDS`), then one AI reply in the owner's voice |
-| **Owner** | Records the message into the contact's memory; does **not** auto-reply on top |
+| **Contact** | Buffers rapid messages (`REPLY_DEBOUNCE_SECONDS`), then prepares one private draft in the owner's voice |
+| **Owner** | Reviews a draft if desired, sends their own message, and that real message can teach the contact's style |
 | **Bot (echo)** | Ignored — no reply loop |
 
 Example: a child sends `пап`, `разбуди`, `в 7` as three messages within a few seconds.
@@ -297,7 +301,7 @@ Global bot setting `default_persona` (via `/settings set default_persona ...`) a
 ### How replies are triggered
 
 **Telegram Business (managed chats):** contact text messages go through the debounce
-buffer, then greeting check + AI reply. Owner messages are stored only.
+buffer, then greeting check + private draft. Owner messages are stored only.
 
 **Direct bot chat:** normal private text messages trigger the daily greeting check on
 the first message of the day. After the greeting (or when greetings are off), AI replies
@@ -380,7 +384,7 @@ The yellow "Локальный режим" banner confirms auth is bypassed. All
 | **Контакты** | Browse contacts; edit AI persona, openness dial, style-learning toggle, durable facts, and greetings per contact; preview the resolved prompt |
 | **Плейграунд** | Test a persona live — pick a contact, type a message, see the AI draft and latency |
 | **Статистика** | Message / AI reply / greeting counts for the last 7 / 30 / 90 days |
-| **Настройки** | Set global reply mode (предлагать / авто / выкл), edit `default_persona`, etc. |
+| **Настройки** | Set global reply mode (предлагать / выкл), edit `default_persona`, etc. |
 
 > **Tip:** contacts appear in the roster only after they have sent at least one message
 > (direct bot chat or Telegram Business). Use the Playground tab with a known `user_id`
@@ -416,7 +420,7 @@ Restart the bot, then open your bot in Telegram and tap the Mini App button.
 - Phase 7 (partial): admin-gated API, contacts roster, persona playground, HTML admin console
 - **Telegram Business transport** (done): `business_connection` / `business_message` handlers, per-contact managed-chat memory, proactive greetings via `business_connection_id`
 - **Reply debounce** (done): `REPLY_DEBOUNCE_SECONDS` batches rapid contact messages before one AI reply
-- Phase 8 (done): PostgreSQL-ready persistence, admin Mini App contacts/playground/stats, per-contact Business reply modes (suggest / auto / off)
+- Phase 8 (done): PostgreSQL-ready persistence, admin Mini App contacts/playground/stats, per-contact Business reply modes (suggest / off)
 - Phase 10 (done): rolling conversation summary for context beyond the recent window
 - Phase 11 (done): per-contact durable facts — LLM extraction, Mini App fact editor, prompt injection
 - Phase 12 (done): per-contact openness dial (`open` / `neutral` / `reserved`) and opt-in owner writing-style learning

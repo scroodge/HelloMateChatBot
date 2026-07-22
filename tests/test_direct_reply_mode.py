@@ -58,12 +58,12 @@ async def test_direct_suggest_passes_suggest_mode(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_direct_auto_passes_auto(tmp_path) -> None:
+async def test_legacy_auto_setting_passes_draft_mode(tmp_path) -> None:
     db = Database(f"sqlite:///{tmp_path / 'direct.db'}")
     db.open()
     with db:
         settings = SettingsService(db.settings, default_language="ru", default_greeting_hour=9)
-        settings.set_business_reply_mode(555, "auto")
+        settings.set_bot_setting("business_reply_mode", "auto")
         update = _make_update(555, "привет")
         context = _make_context(settings, admin_ids={100000001})
 
@@ -71,7 +71,7 @@ async def test_direct_auto_passes_auto(tmp_path) -> None:
             await messages_handler.private_text_message(update, context)
 
         kwargs = mock_pipe.await_args.kwargs
-        assert kwargs["reply_mode"] == "auto"
+        assert kwargs["reply_mode"] == "suggest"
 
 
 @pytest.mark.asyncio

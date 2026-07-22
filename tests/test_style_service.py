@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -68,10 +67,7 @@ async def test_refresh_when_enough_owner_messages(tmp_path) -> None:
         _enable_style(settings, 1)
         _fill_owner(memory, 1, 3)
         await svc.maybe_refresh(1)
-        assert llm.complete.await_count == 2  # global baseline + contact-specific layer
-        global_profile = memory.get_owner_style_profile("global")
-        assert global_profile is not None
-        assert global_profile.profile == "СТИЛЬ"
+        assert llm.complete.await_count == 1
         profile = memory.get_style_profile(1)
         assert profile is not None
         assert profile.profile == "СТИЛЬ"
@@ -100,31 +96,31 @@ async def test_incremental_only_folds_new_owner_messages(tmp_path) -> None:
         _enable_style(settings, 1)
         _fill_owner(memory, 1, 3)
         await svc.maybe_refresh(1)
-        assert llm.complete.await_count == 2
+        assert llm.complete.await_count == 1
 
         _fill_owner(memory, 1, 3)  # 3 more owner messages
         await svc.maybe_refresh(1)
-        assert llm.complete.await_count == 4
+        assert llm.complete.await_count == 2
 
-        second_prompt = llm.complete.await_args_list[3].args[0]
+        second_prompt = llm.complete.await_args_list[1].args[0]
         user_block = second_prompt[1]["content"]
         assert "Текущее описание стиля:" in user_block  # prior profile folded in
         assert memory.get_style_profile(1).covered_count == 6
 
 
 @pytest.mark.asyncio
-async def test_refreshes_a_persona_style_layer(tmp_path) -> None:
+async def test_persona_does_not_create_a_shared_style_layer(tmp_path) -> None:
     svc, memory, settings, _, db = _make(tmp_path, interval=3)
     with db:
-        current = settings.get_user_settings(1)
-        settings.save_user_settings(replace(current, style_learning_enabled=True, persona_preset="friend"))
+        _enable_style(settings, 1)
         _fill_owner(memory, 1, 3)
 
         await svc.maybe_refresh(1)
 
-        profile = memory.get_owner_style_profile("persona:friend")
+        profile = memory.get_style_profile(1)
         assert profile is not None
         assert profile.profile == "СТИЛЬ"
+        assert memory.get_owner_style_profile("persona:friend") is None
 
 
 @pytest.mark.asyncio

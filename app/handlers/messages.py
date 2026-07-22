@@ -46,12 +46,11 @@ async def private_text_message(update: Update, context: ContextTypes.DEFAULT_TYP
             await update.effective_message.reply_text(reply)
         return
 
-    # Respect the contact's reply mode here too: a direct chat must never get an
-    # automatic reply unless the resolved mode is explicitly "auto". The default
-    # is "suggest", so by default the bot only stores a draft in the Suggest
-    # Inbox (Mini App) — it never answers the person on its own.
+    # Respect the contact's reply mode here too. The default is "suggest", so
+    # the bot only stores a draft in the Suggest Inbox and never answers a
+    # contact on its own.
     settings_service = context.bot_data.get("settings_service")
-    reply_mode = "auto"
+    reply_mode = "suggest"
     if isinstance(settings_service, SettingsService):
         reply_mode = settings_service.get_business_reply_mode(user_id)
 

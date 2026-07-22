@@ -49,7 +49,7 @@ user_settings = Table(
     Column("persona_tone", Text),  # e.g. "warm", "formal", "playful"
     Column("persona_topics", Text),  # JSON list of allowed topics
     Column("persona_boundaries", Text),  # JSON list of forbidden topics
-    Column("business_reply_mode", Text),  # "auto" | "suggest" | "off" | NULL=inherit global
+    Column("business_reply_mode", Text),  # "suggest" | "off" | NULL=inherit global
     Column("openness", Text),  # "open" | "neutral" | "reserved" | NULL=inherit global
     Column("style_learning_enabled", Boolean, nullable=False, default=False),
     Column("updated_at", Text),

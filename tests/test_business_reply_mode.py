@@ -31,18 +31,18 @@ def test_default_mode_is_suggest(tmp_path) -> None:
 def test_global_setting_overrides_default(tmp_path) -> None:
     svc, db = _make_settings_service(tmp_path)
     with db:
-        svc.set_bot_setting("business_reply_mode", "auto")
-        assert svc.get_business_reply_mode(999) == "auto"
+        svc.set_bot_setting("business_reply_mode", "off")
+        assert svc.get_business_reply_mode(999) == "off"
 
 
 def test_per_contact_overrides_global(tmp_path) -> None:
     svc, db = _make_settings_service(tmp_path)
     with db:
-        svc.set_bot_setting("business_reply_mode", "auto")
+        svc.set_bot_setting("business_reply_mode", "off")
         svc.set_business_reply_mode(42, "off")
         assert svc.get_business_reply_mode(42) == "off"
         # other users still get the global
-        assert svc.get_business_reply_mode(99) == "auto"
+        assert svc.get_business_reply_mode(99) == "off"
 
 
 def test_per_contact_none_falls_back_to_global(tmp_path) -> None:
@@ -70,8 +70,15 @@ def test_invalid_global_mode_falls_back_to_default(tmp_path) -> None:
         assert svc.get_business_reply_mode(1) == DEFAULT_BUSINESS_REPLY_MODE
 
 
+def test_legacy_auto_mode_falls_back_to_draft_only(tmp_path) -> None:
+    svc, db = _make_settings_service(tmp_path)
+    with db:
+        svc.set_bot_setting("business_reply_mode", "auto")
+        assert svc.get_business_reply_mode(1) == "suggest"
+
+
 def test_valid_modes_constant() -> None:
-    assert VALID_BUSINESS_REPLY_MODES == {"auto", "suggest", "off"}
+    assert VALID_BUSINESS_REPLY_MODES == {"suggest", "off"}
 
 
 def test_business_reply_context_labels_quoted_owner_message() -> None:
@@ -245,12 +252,13 @@ async def test_deliver_ai_reply_suggest_records_to_inbox_no_chat_message() -> No
 
 
 @pytest.mark.asyncio
-async def test_deliver_ai_reply_auto_sends_directly() -> None:
+async def test_deliver_ai_reply_legacy_auto_creates_a_draft() -> None:
     from app.handlers.incoming import _deliver_ai_reply
     from app.services.reply_service import ReplyService
 
     reply_service = MagicMock(spec=ReplyService)
-    reply_service.generate_reply = AsyncMock(return_value="ответ")
+    reply_service.draft_reply = AsyncMock(return_value="ответ")
+    suggestions_service = MagicMock()
 
     reply_fn = AsyncMock()
 
@@ -261,10 +269,12 @@ async def test_deliver_ai_reply_auto_sends_directly() -> None:
         reply_fn=reply_fn,
         reply_mode="auto",
         event_service=None,
+        suggestions_service=suggestions_service,
     )
 
-    reply_service.generate_reply.assert_awaited_once_with(1, "привет", reply_context=None)
-    reply_fn.assert_awaited_once_with("ответ")
+    reply_service.draft_reply.assert_awaited_once_with(1, "привет", reply_context=None)
+    suggestions_service.record.assert_called_once_with(1, "привет", "ответ")
+    reply_fn.assert_not_called()
 
 
 @pytest.mark.asyncio

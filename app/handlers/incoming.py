@@ -11,7 +11,6 @@ from telegram.ext import ContextTypes
 from app.services.contact_facts_service import ContactFactsService
 from app.services.conversation_starter_service import ConversationStarterService
 from app.services.event_service import (
-    AI_REPLY_SENT,
     GREETING_SENT,
     MESSAGE_RECEIVED,
     EventService,
@@ -42,7 +41,7 @@ async def handle_incoming_text(
     reply_fn: ReplyFn,
     sender_is_owner: bool = False,
     contact_display_name: str | None = None,
-    reply_mode: str = "auto",
+    reply_mode: str = "suggest",
     reply_context: str | None = None,
 ) -> None:
     """Process an incoming text message for a contact.
@@ -298,7 +297,7 @@ async def _deliver_ai_reply(
     processing_status: ProcessingStatusService | None = None,
     status_token: str | None = None,
 ) -> None:
-    """Route AI reply based on mode: auto sends directly, suggest stores to inbox, off skips."""
+    """Route AI output to the inbox or skip it; never send it to a contact."""
 
     logger.info(
         "deliver_ai_reply contact=%s mode=%s has_reply_service=%s",
@@ -322,6 +321,11 @@ async def _deliver_ai_reply(
     if processing_status is not None and status_token is not None:
         processing_status.set_generating(contact_user_id, status_token)
 
+    # ``auto`` can exist in older stored settings or in an old queued event.
+    # Treat it as a draft request so no path sends in the owner's name.
+    if reply_mode == "auto":
+        reply_mode = "suggest"
+
     if reply_mode == "suggest":
         # Suggest mode never writes to the chat: the draft is stored in the
         # Suggest Inbox (Mini App) only. No DM, no message to the contact.
@@ -343,15 +347,8 @@ async def _deliver_ai_reply(
             )
         return
 
-    # auto (default)
-    reply = await reply_service.generate_reply(
-        contact_user_id, message_text, reply_context=reply_context
+    logger.warning(
+        "Unknown reply mode %r for contact %s; no draft created", reply_mode, contact_user_id
     )
-    if reply:
-        await reply_fn(reply)
-        if isinstance(event_service, EventService):
-            event_service.record(contact_user_id, AI_REPLY_SENT)
-        if processing_status is not None and status_token is not None:
-            processing_status.clear(contact_user_id, status_token)
-    elif processing_status is not None and status_token is not None:
-        processing_status.set_failed(contact_user_id, status_token, "Не удалось создать ответ")
+    if processing_status is not None and status_token is not None:
+        processing_status.set_failed(contact_user_id, status_token, "Неизвестный режим ответа")

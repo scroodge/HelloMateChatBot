@@ -35,44 +35,6 @@ def _freshness_at(value: object) -> datetime | None:
     return value if isinstance(value, datetime) else None
 
 
-def _relationship_style_scope(settings: object) -> str | None:
-    preset = (getattr(settings, "persona_preset", None) or "").strip().casefold()
-    if preset:
-        return f"persona:{preset}"
-    relationship = (getattr(settings, "persona_relationship", None) or "").strip().casefold()
-    return f"relationship:{relationship[:80]}" if relationship else None
-
-
-def _style_layers_prompt(
-    language: str,
-    *,
-    global_profile: str | None,
-    relationship_profile: str | None,
-    contact_profile: str | None,
-) -> str:
-    """Compose ordered style layers without letting them overrule safety policy."""
-    if language == "ru":
-        lines = [
-            "Подражай манере письма владельца. Слои ниже идут от общего к частному; "
-            "следующий слой уточняет предыдущий. Не нарушай правила точности и открытости."
-        ]
-        labels = ("Общая манера", "Манера для этой роли", "Особенность этого контакта")
-    else:
-        lines = [
-            "Mimic the owner's writing style. The layers below go from general to specific; "
-            "each following layer refines the previous one. Do not override accuracy or openness rules."
-        ]
-        labels = ("Global baseline", "Role-specific style", "Contact-specific adjustment")
-    for label, profile in zip(
-        labels,
-        (global_profile, relationship_profile, contact_profile),
-        strict=True,
-    ):
-        if profile:
-            lines.append(f"{label}: {profile}")
-    return " ".join(lines)
-
-
 # Meta-instruction leakage: a weak model sometimes appends a self-directed
 # revision request or AI-disclaimer after the actual reply (e.g. "...can you
 # please modify the response to fit the persona and guidelines provided..."),
@@ -541,34 +503,23 @@ class ReplyService:
         # is not on a reserved footing (reserved = don't reveal the real you).
         if settings.style_learning_enabled and openness != "reserved":
             contact_style = self.memory_service.get_style_profile(user_id)
-            global_style = self.memory_service.get_owner_style_profile("global")
-            relationship_scope = _relationship_style_scope(settings)
-            relationship_style = (
-                self.memory_service.get_owner_style_profile(relationship_scope)
-                if relationship_scope
-                else None
-            )
-            if any(
-                style is not None and style.profile
-                for style in (global_style, relationship_style, contact_style)
-            ):
+            if contact_style is not None and contact_style.profile:
+                instruction = (
+                    "Подражай манере владельца только по его реальным сообщениям в этом "
+                    "чате. Не используй стиль из других чатов. Не нарушай правила точности "
+                    "и открытости."
+                    if language == "ru"
+                    else "Mimic the owner's writing style only from their real messages in this "
+                    "chat. Do not use style from other chats. Do not override accuracy or "
+                    "openness rules."
+                )
                 blocks.append(
                     context_block(
                         "style",
-                        " "
-                        + _style_layers_prompt(
-                            language,
-                            global_profile=global_style.profile if global_style else None,
-                            relationship_profile=(
-                                relationship_style.profile if relationship_style else None
-                            ),
-                            contact_profile=contact_style.profile if contact_style else None,
-                        ),
+                        f" {instruction} Стиль этого контакта: {contact_style.profile}",
                         priority=300,
-                        source_id=f"style_layers:{relationship_scope or 'none'}:{user_id}",
-                        freshness_at=_freshness_at(
-                            getattr(contact_style or relationship_style or global_style, "updated_at", None)
-                        ),
+                        source_id=f"contact_style:{user_id}",
+                        freshness_at=_freshness_at(getattr(contact_style, "updated_at", None)),
                         sensitivity="owner_private",
                     )
                 )

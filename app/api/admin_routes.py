@@ -46,14 +46,6 @@ from app.services.summary_service import SummaryService
 logger = logging.getLogger(__name__)
 
 
-def _owner_style_scope_key(settings: object) -> str | None:
-    preset = (getattr(settings, "persona_preset", None) or "").strip().casefold()
-    if preset:
-        return f"persona:{preset}"
-    relationship = (getattr(settings, "persona_relationship", None) or "").strip().casefold()
-    return f"relationship:{relationship[:80]}" if relationship else None
-
-
 async def _send_document_via_bot(
     bot_token: str, chat_id: int, filename: str, content: bytes, caption: str = ""
 ) -> None:
@@ -103,7 +95,7 @@ class UserSettingsWriteRequest(BaseModel):
     greeting_hour: int | None = None
     use_starters: bool | None = None
     greeting_text: str | None = None
-    business_reply_mode: str | None = None  # "auto" | "suggest" | "off" | null=inherit global
+    business_reply_mode: str | None = None  # "suggest" | "off" | null=inherit global
     openness: str | None = None  # "open" | "neutral" | "reserved" | null=inherit global
     style_learning_enabled: bool | None = None
 
@@ -631,13 +623,6 @@ def create_admin_router(
         contact_facts = facts_service.facts_structured(user_id) if facts_service is not None else {}
 
         style = memory_service.get_style_profile(user_id)
-        relationship_scope = _owner_style_scope_key(settings)
-        global_style = memory_service.get_owner_style_profile("global")
-        relationship_style = (
-            memory_service.get_owner_style_profile(relationship_scope)
-            if relationship_scope
-            else None
-        )
 
         examples = (
             [
@@ -669,8 +654,6 @@ def create_admin_router(
             "style_learning_enabled": settings.style_learning_enabled,
             "style_profile": style.profile if style else None,
             "style_profiles": {
-                "global": global_style.profile if global_style else None,
-                "relationship": relationship_style.profile if relationship_style else None,
                 "contact": style.profile if style else None,
             },
             "persona": {
@@ -884,10 +867,10 @@ def create_admin_router(
 
         if "business_reply_mode" in request.model_fields_set:
             mode = request.business_reply_mode
-            if mode is not None and mode not in {"auto", "suggest", "off"}:
+            if mode is not None and mode not in {"suggest", "off"}:
                 raise HTTPException(
                     status_code=422,
-                    detail="business_reply_mode must be 'auto', 'suggest', 'off', or null",
+                    detail="business_reply_mode must be 'suggest', 'off', or null",
                 )
             updated = replace(updated, business_reply_mode=mode)
 

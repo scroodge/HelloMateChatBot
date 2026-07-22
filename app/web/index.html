@@ -584,7 +584,6 @@
       <select id="f-business-reply-mode">
         <option value="">Наследовать глобальный</option>
         <option value="suggest">Предлагать черновик</option>
-        <option value="auto">Отвечать автоматически</option>
         <option value="off">Не отвечать</option>
       </select>
       <label>Открытость (насколько раскрываться)</label>
@@ -824,7 +823,6 @@
       </p>
       <select id="gs-business-reply-mode" onchange="saveBusinessReplyMode()">
         <option value="suggest">Предлагать черновик (по умолчанию)</option>
-        <option value="auto">Отвечать автоматически</option>
         <option value="off">Не отвечать</option>
       </select>
     </div>
@@ -1120,7 +1118,7 @@ async function openContact(userId) {
     document.getElementById('f-greeting-enabled').checked = u.greeting_enabled;
     document.getElementById('f-greeting-hour').value      = u.greeting_hour;
     document.getElementById('f-language').value           = u.language;
-    document.getElementById('f-business-reply-mode').value = u.business_reply_mode || '';
+    document.getElementById('f-business-reply-mode').value = u.business_reply_mode === 'auto' ? '' : (u.business_reply_mode || '');
     document.getElementById('f-openness').value = u.openness || '';
     document.getElementById('f-style-learning').checked = !!u.style_learning_enabled;
     document.getElementById('f-risk-canary').checked = !!riskCanary.enabled;
@@ -2015,9 +2013,7 @@ function renderStyle(profiles) {
   const el = document.getElementById('detail-style');
   const values = typeof profiles === 'string' ? { contact: profiles } : (profiles || {});
   const labels = {
-    global: 'Общая манера',
-    relationship: 'Манера для этой роли',
-    contact: 'Особенность этого контакта',
+    contact: 'Твоя манера в этом чате',
   };
   const layers = Object.entries(labels).filter(([key]) => values[key] && values[key].trim());
   if (layers.length) {
@@ -2215,7 +2211,7 @@ async function loadGlobalBusinessReplyMode() {
   try {
     const settings = await get('/admin/settings');
     const mode = settings['business_reply_mode'] || 'suggest';
-    document.getElementById('gs-business-reply-mode').value = mode;
+    document.getElementById('gs-business-reply-mode').value = mode === 'auto' ? 'suggest' : mode;
   } catch(e) { /* keep default */ }
 }
 

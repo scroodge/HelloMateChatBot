@@ -112,7 +112,7 @@ async def test_style_applied_when_open_and_enabled(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_style_layers_apply_global_persona_then_contact(tmp_path) -> None:
+async def test_style_uses_only_the_current_contact(tmp_path) -> None:
     db, settings, memory, reply, llm = _build_services(tmp_path)
     with db:
         current = settings.get_user_settings(1)
@@ -120,15 +120,18 @@ async def test_style_layers_apply_global_persona_then_contact(tmp_path) -> None:
             replace(current, style_learning_enabled=True, persona_preset="friend")
         )
         memory.set_owner_style_profile("global", "общий стиль", covered_through_message_id=3)
-        memory.set_owner_style_profile("persona:friend", "стиль друзей", covered_through_message_id=4)
+        memory.set_owner_style_profile(
+            "persona:friend", "стиль друзей", covered_through_message_id=4
+        )
         memory.set_style_profile(1, "личная деталь", covered_count=5)
         settings.set_openness(1, "open")
 
         await reply.generate_reply(1, "привет")
 
         system = llm.complete.await_args.args[0][0]["content"]
-        assert system.index("общий стиль") < system.index("стиль друзей")
-        assert system.index("стиль друзей") < system.index("личная деталь")
+        assert "общий стиль" not in system
+        assert "стиль друзей" not in system
+        assert "личная деталь" in system
 
 
 @pytest.mark.asyncio

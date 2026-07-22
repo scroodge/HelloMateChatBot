@@ -137,7 +137,7 @@ async def business_message_handler(update: Update, context: ContextTypes.DEFAULT
 
         # Contact message — resolve reply mode
         settings_service = context.bot_data.get("settings_service")
-        reply_mode = "auto"
+        reply_mode = "suggest"
         if isinstance(settings_service, SettingsService):
             reply_mode = settings_service.get_business_reply_mode(contact_user_id)
         logger.info(
@@ -183,7 +183,7 @@ async def _handle_business_voice(
     if not isinstance(reply_service, ReplyService) or message.voice is None:
         return
 
-    reply_mode = "auto"
+    reply_mode = "suggest"
     if isinstance(settings_service, SettingsService):
         reply_mode = settings_service.get_business_reply_mode(contact_user_id)
 
