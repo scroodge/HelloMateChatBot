@@ -729,7 +729,7 @@
     <div class="card">
       <div class="card-title">Слепое сравнение A / B</div>
       <div class="activity-lede">Запускается только по твоему действию. Оба ответа остаются в панели, контакт ничего не получает.</div>
-      <label>ID контакта</label><input type="number" id="shadow-user-id" placeholder="Например, 123456789">
+      <label>Контакт</label><select id="shadow-user-id"><option value="">Загрузка контактов…</option></select>
       <label>Кандидат</label><select id="shadow-candidate"><option value="">Сначала добавь кандидата</option></select>
       <label>Сообщение для сравнения</label><textarea id="shadow-message" placeholder="Вставь сообщение контакта для приватного A/B сравнения"></textarea>
       <button class="btn" onclick="createShadowReview()">Создать сравнение</button>
@@ -2252,6 +2252,7 @@ async function loadEvalCandidates() {
     if (items.some(item => item.status === 'queued' || item.status === 'running')) {
       window.candidateRefreshTimer = setTimeout(loadEvalCandidates, 3000);
     }
+    loadShadowReviewContacts();
     loadShadowReviews();
   } catch (e) {
     const message = `Не удалось загрузить серверные ключи: ${e.message}`;
@@ -2271,6 +2272,24 @@ async function loadShadowReviews() {
       return `<div class="activity-row"><span class="activity-mark ${item.status === 'failed' ? 'problem' : 'live'}"></span><div class="activity-copy"><div class="activity-title">Сравнение #${item.id}</div><div class="activity-meta">${escHtml(detail)}</div></div></div>`;
     }).join('') : 'Создай первое A/B сравнение выше.';
   } catch (e) { el.innerHTML = `<div class="error">${escHtml(e.message)}</div>`; }
+}
+async function loadShadowReviewContacts() {
+  const select = document.getElementById('shadow-user-id');
+  if (!select) return;
+  try {
+    const selectedUserId = select.value;
+    const users = contactsCache.length ? contactsCache : await get('/admin/users');
+    select.innerHTML = '<option value="">Выбери контакт</option>';
+    users.forEach(user => {
+      const option = document.createElement('option');
+      option.value = user.user_id;
+      option.textContent = user.display_name || `Контакт без имени · ${user.user_id}`;
+      select.appendChild(option);
+    });
+    if (selectedUserId) select.value = selectedUserId;
+  } catch (e) {
+    select.innerHTML = '<option value="">Не удалось загрузить контакты</option>';
+  }
 }
 async function createShadowReview() {
   try {
