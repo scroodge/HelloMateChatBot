@@ -18,6 +18,7 @@ from app.services.candidate_evaluation_service import CandidateEvaluationService
 from app.services.contact_facts_service import ContactFactsService
 from app.services.examples_service import ContactExamplesService
 from app.services.fact_categories_service import FactCategoriesService
+from app.services.fine_tuning_gate_service import FineTuningGateService
 from app.services.greeting_rules_service import GreetingRulesService
 from app.services.greeting_service import GreetingService
 from app.services.learning_proposals_service import LearningProposalsService
@@ -144,6 +145,7 @@ def create_api_app(config: Config, database: Database, processing_status_service
         candidate_evaluation_service,
         database.shadow_reviews,
     )
+    fine_tuning_gate_service = FineTuningGateService(settings_service)
 
     dev_user_id = next(iter(config.admin_user_ids), None) if config.mini_app_dev else None
     background_worker = BackgroundWorker(
@@ -211,6 +213,7 @@ def create_api_app(config: Config, database: Database, processing_status_service
             risk_routing_service=risk_routing_service,
             shadow_review_service=shadow_review_service,
             model_decision_service=model_decision_service,
+            fine_tuning_gate_service=fine_tuning_gate_service,
             mini_app_dev=config.mini_app_dev,
             dev_user_id=dev_user_id,
         ),

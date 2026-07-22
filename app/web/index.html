@@ -741,6 +741,17 @@
       <button class="btn btn-secondary" onclick="createModelDecisionReport()">Сохранить snapshot</button>
       <div id="model-decision-report-list" class="activity-meta" style="margin-top:8px">Ещё нет snapshot.</div>
     </div>
+    <div class="card">
+      <div class="card-title">Fine-tuning, только preflight</div>
+      <div class="activity-lede">Ничего не обучает и не выгружает. Отметь только подтверждённые условия.</div>
+      <label><input type="checkbox" data-fine-tuning="owner_approved_dataset"> Dataset очищен и одобрен владельцем</label>
+      <label><input type="checkbox" data-fine-tuning="independent_holdout"> Есть независимый holdout</label>
+      <label><input type="checkbox" data-fine-tuning="prompt_context_plateau"> Prompt, context и retrieval уже проверены</label>
+      <label><input type="checkbox" data-fine-tuning="privacy_and_deletion_plan"> Определены privacy и удаление данных</label>
+      <label><input type="checkbox" data-fine-tuning="rollback_confirmed"> Есть rollback к базовой модели</label>
+      <button class="btn btn-secondary" onclick="confirmFineTuningGate()">Подтвердить preflight</button>
+      <div id="fine-tuning-gate-status" class="activity-meta" style="margin-top:8px">Проверяем условия…</div>
+    </div>
   </div>
 
   <!-- ── PLAYGROUND ── -->
@@ -2261,6 +2272,7 @@ async function loadEvalCandidates() {
     loadShadowReviewContacts();
     loadShadowReviews();
     loadModelDecisionReports();
+    loadFineTuningGate();
   } catch (e) {
     const message = `Не удалось загрузить серверные ключи: ${e.message}`;
     formError.textContent = message;
@@ -2335,6 +2347,30 @@ async function createModelDecisionReport() {
     await post('/admin/model-decision-reports', {});
     toast('Snapshot решения сохранён');
     loadModelDecisionReports();
+  } catch (e) { tg.showAlert?.('Ошибка: ' + e.message); }
+}
+async function loadFineTuningGate() {
+  const el = document.getElementById('fine-tuning-gate-status');
+  if (!el) return;
+  try {
+    const gate = await get('/admin/fine-tuning-gate');
+    document.querySelectorAll('[data-fine-tuning]').forEach(input => {
+      input.checked = Boolean(gate.confirmations[input.dataset.fineTuning]);
+    });
+    el.textContent = gate.ready_to_consider
+      ? 'Preflight подтверждён. Обучение всё ещё выключено.'
+      : 'Preflight не завершён. Обучение выключено.';
+  } catch (e) { el.innerHTML = `<span class="error">${escHtml(e.message)}</span>`; }
+}
+async function confirmFineTuningGate() {
+  try {
+    const payload = {};
+    document.querySelectorAll('[data-fine-tuning]').forEach(input => {
+      payload[input.dataset.fineTuning] = input.checked;
+    });
+    await post('/admin/fine-tuning-gate', payload);
+    toast('Preflight подтверждён, обучение не запускалось');
+    loadFineTuningGate();
   } catch (e) { tg.showAlert?.('Ошибка: ' + e.message); }
 }
 async function addEvalCandidate() {

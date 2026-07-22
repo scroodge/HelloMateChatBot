@@ -24,6 +24,7 @@ from app.services.candidate_evaluation_service import CandidateEvaluationService
 from app.services.contact_facts_service import ContactFactsService
 from app.services.examples_service import ContactExamplesService
 from app.services.fact_categories_service import FactCategoriesService
+from app.services.fine_tuning_gate_service import FineTuningGateService
 from app.services.greeting_rules_service import GreetingRulesService
 from app.services.greeting_service import GreetingService
 from app.services.learning_proposals_service import LearningProposalsService
@@ -172,6 +173,14 @@ class ShadowReviewResolveRequest(BaseModel):
     winner: str
 
 
+class FineTuningGateRequest(BaseModel):
+    owner_approved_dataset: bool = False
+    independent_holdout: bool = False
+    prompt_context_plateau: bool = False
+    privacy_and_deletion_plan: bool = False
+    rollback_confirmed: bool = False
+
+
 # ---------------------------------------------------------------------------
 # Router factory
 # ---------------------------------------------------------------------------
@@ -204,6 +213,7 @@ def create_admin_router(
     risk_routing_service: RiskRoutingService | None = None,
     shadow_review_service: ShadowReviewService | None = None,
     model_decision_service: ModelDecisionService | None = None,
+    fine_tuning_gate_service: FineTuningGateService | None = None,
     *,
     mini_app_dev: bool = False,
     dev_user_id: int | None = None,
@@ -376,6 +386,23 @@ def create_admin_router(
         if model_decision_service is None:
             raise HTTPException(status_code=503, detail="Model decision gate is not enabled")
         return model_decision_service.create_report()
+
+    @router.get("/fine-tuning-gate")
+    async def fine_tuning_gate_status(caller_id: int = AdminUser) -> dict[str, object]:
+        if fine_tuning_gate_service is None:
+            raise HTTPException(status_code=503, detail="Fine-tuning gate is not enabled")
+        return fine_tuning_gate_service.status()
+
+    @router.post("/fine-tuning-gate")
+    async def confirm_fine_tuning_gate(
+        request: FineTuningGateRequest, caller_id: int = AdminUser
+    ) -> dict[str, object]:
+        if fine_tuning_gate_service is None:
+            raise HTTPException(status_code=503, detail="Fine-tuning gate is not enabled")
+        try:
+            return fine_tuning_gate_service.confirm(request.model_dump())
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @router.get("/background-jobs/health")
     async def background_jobs_health(caller_id: int = AdminUser) -> dict[str, object]:

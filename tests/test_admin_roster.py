@@ -14,6 +14,7 @@ from app.models.memory import ConversationMessage
 from app.services.background_worker import BackgroundWorker
 from app.services.candidate_evaluation_service import CandidateEvaluationService
 from app.services.examples_service import ContactExamplesService
+from app.services.fine_tuning_gate_service import FineTuningGateService
 from app.services.greeting_rules_service import GreetingRulesService
 from app.services.greeting_service import GreetingService
 from app.services.learning_proposals_service import LearningProposalsService
@@ -67,6 +68,7 @@ def _make_client(db: Database) -> tuple[TestClient, ProfileService, SettingsServ
     model_decision_service = ModelDecisionService(
         db.model_decision_reports, candidate_evaluation_service, db.shadow_reviews
     )
+    fine_tuning_gate_service = FineTuningGateService(settings_service)
 
     app = FastAPI()
     app.include_router(
@@ -90,6 +92,7 @@ def _make_client(db: Database) -> tuple[TestClient, ProfileService, SettingsServ
             candidate_evaluation_service=candidate_evaluation_service,
             background_worker=background_worker,
             model_decision_service=model_decision_service,
+            fine_tuning_gate_service=fine_tuning_gate_service,
             mini_app_dev=True,  # bypass Telegram auth in tests
             dev_user_id=ADMIN_ID,
         ),
@@ -138,6 +141,26 @@ def test_model_decision_report_is_an_owner_triggered_snapshot(tmp_path) -> None:
     assert created.status_code == 200
     assert created.json()["report"]["candidates"][0]["recommendation"] == "needs_owner_review"
     assert saved.json()[0]["id"] == created.json()["id"]
+
+
+def test_fine_tuning_gate_requires_every_confirmation(tmp_path) -> None:
+    with Database(f"sqlite:///{tmp_path / 'fine-tuning-gate.db'}") as db:
+        client, _, _ = _make_client(db)
+        missing = client.post("/api/admin/fine-tuning-gate", json={})
+        ready = client.post(
+            "/api/admin/fine-tuning-gate",
+            json={
+                "owner_approved_dataset": True,
+                "independent_holdout": True,
+                "prompt_context_plateau": True,
+                "privacy_and_deletion_plan": True,
+                "rollback_confirmed": True,
+            },
+        )
+
+    assert missing.status_code == 422
+    assert ready.json()["ready_to_consider"] is True
+    assert ready.json()["training_enabled"] is False
 
 
 def test_delete_eval_candidate_removes_saved_result(tmp_path) -> None:

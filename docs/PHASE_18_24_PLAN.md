@@ -1,6 +1,6 @@
 # HelloMate — план развития Phase 18–24
 
-_Статус: Phase 18–21C реализованы и deployed; Phase 21D candidate lab реализован locally, credential-registry deployment pending; Phase 22A–22C, Phase 23A–23C и Phase 24A–24C реализованы locally; Phase 24D proposal · Последнее обновление: 2026-07-22_
+_Статус: Phase 18–21C реализованы и deployed; Phase 21D candidate lab реализован locally, credential-registry deployment pending; Phase 22A–22C, Phase 23A–23C и Phase 24A–24D реализованы locally · Последнее обновление: 2026-07-22_
 
 ## 1. Цель
 
@@ -814,6 +814,18 @@ Fine-tuning рассматривается только если:
 
 Fine-tuning может обучать стиль и форму ответа. Факты, отношения, планы и память
 остаются во внешнем контексте.
+
+### Фактический результат 24D (2026-07-22)
+
+- Добавлен owner-only Fine-tuning preflight в Candidate Lab. Он требует явного
+  подтверждения всех пяти условий: cleaned owner-approved dataset,
+  independent holdout, plateau prompt/context/retrieval, privacy/deletion plan
+  и rollback к базовой модели.
+- Неполный checklist возвращает validation error. Полный checklist сохраняет
+  только owner confirmation и timestamp, без dataset или сообщений.
+- Gate намеренно не имеет кода запуска training, upload или смены active
+  model. Даже при `ready_to_consider=true` `training_enabled` остаётся `false`.
+- Верификация: service/API tests, Ruff и Mini App JavaScript syntax прошли.
 
 ### Definition of Done
 
