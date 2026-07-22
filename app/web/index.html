@@ -1747,8 +1747,9 @@ async function loadSuggestions({ silent = false } = {}) {
           <option value="unsafe">Небезопасно отправлять</option><option value="other">Другое</option>
         </select>
         <div class="row" style="flex-wrap:wrap;gap:6px">
-          <button class="btn btn-sm" onclick="copySuggestion(${s.id})" style="width:auto">📋 Копировать</button>
-          <button class="btn btn-sm" onclick="acceptSuggestion(${s.id})" style="width:auto">✓ Принять</button>
+          <button class="btn btn-sm" onclick="acceptAndCopySuggestion(${s.id})" style="width:auto">✓ Принять и копировать</button>
+          <button class="btn btn-sm btn-secondary" onclick="copySuggestion(${s.id})" style="width:auto">📋 Только копировать</button>
+          <button class="btn btn-sm btn-secondary" onclick="acceptSuggestion(${s.id})" style="width:auto">Принять без копирования</button>
           <button class="btn btn-sm" onclick="saveSuggestion(${s.id},'positive')" style="width:auto">🎯 В эталоны</button>
           <button class="btn btn-sm btn-secondary" onclick="saveSuggestion(${s.id},'negative')" style="width:auto">👎 Антипример</button>
           <button class="btn btn-sm btn-secondary" onclick="dismissSuggestion(${s.id})" style="width:auto">🗑 Скрыть</button>
@@ -1765,29 +1766,42 @@ async function loadSuggestions({ silent = false } = {}) {
 }
 
 async function copySuggestion(id) {
+  if (await copySuggestionText(id)) toast('Скопировано');
+}
+
+async function copySuggestionText(id) {
   const text = document.getElementById('sugg-text-' + id).value;
-  const done = () => toast('Скопировано');
   try {
-    await post(`/admin/suggestions/${id}/copy`);
     if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(text); done();
+      await navigator.clipboard.writeText(text);
     } else {
       const ta = document.getElementById('sugg-text-' + id);
-      ta.select(); document.execCommand('copy'); done();
+      ta.select();
+      if (!document.execCommand('copy')) throw new Error('Copy failed');
     }
+    await post(`/admin/suggestions/${id}/copy`);
+    return true;
   } catch (_) {
     tg.showAlert?.('Не удалось скопировать');
+    return false;
   }
 }
 
-async function acceptSuggestion(id) {
+async function acceptSuggestion(id, copied = false) {
   const reply_text = document.getElementById('sugg-text-' + id).value.trim();
   const reason = document.getElementById('sugg-reason-' + id).value || null;
   if (!reply_text) { tg.showAlert?.('Пустой ответ'); return; }
   try {
     const res = await post(`/admin/suggestions/${id}/accept`, { reply_text, reason });
-    removeSuggestionCard(id, res.pending); toast('Принято');
+    removeSuggestionCard(id, res.pending); toast(copied ? 'Скопировано и принято' : 'Принято');
   } catch(e) { tg.showAlert?.('Ошибка: ' + e.message); }
+}
+
+async function acceptAndCopySuggestion(id) {
+  const replyText = document.getElementById('sugg-text-' + id).value.trim();
+  if (!replyText) { tg.showAlert?.('Пустой ответ'); return; }
+  if (!await copySuggestionText(id)) return;
+  await acceptSuggestion(id, true);
 }
 
 async function saveSuggestion(id, kind = 'positive') {
