@@ -33,6 +33,7 @@ from app.database.repositories.owner_reply_pairs import OwnerReplyPairsRepositor
 from app.database.repositories.profile import ProfileRepositoryImpl
 from app.database.repositories.reply_decisions import ReplyDecisionsRepositoryImpl
 from app.database.repositories.settings import SettingsRepositoryImpl
+from app.database.repositories.shadow_reviews import ShadowReviewsRepositoryImpl
 from app.database.repositories.suggestions import SuggestionsRepositoryImpl
 from app.database.schema import metadata
 
@@ -57,6 +58,7 @@ class Database:
         self.greetings = GreetingRepositoryImpl(self)
         self.greeting_rules = GreetingRulesRepositoryImpl(self)
         self.settings = SettingsRepositoryImpl(self)
+        self.shadow_reviews = ShadowReviewsRepositoryImpl(self)
         self.profiles = ProfileRepositoryImpl(self)
         self.reply_decisions = ReplyDecisionsRepositoryImpl(self)
         self.moods = MoodRepositoryImpl(self)

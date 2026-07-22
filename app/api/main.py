@@ -31,6 +31,7 @@ from app.services.reply_decision_service import ReplyDecisionService
 from app.services.reply_service import ReplyService
 from app.services.risk_routing_service import RiskRoutingService
 from app.services.settings_service import SettingsService
+from app.services.shadow_review_service import ShadowReviewService
 from app.services.suggestions_service import SuggestionsService
 from app.services.summary_service import SummaryService
 from app.services.weather_service import WeatherService
@@ -131,6 +132,12 @@ def create_api_app(config: Config, database: Database, processing_status_service
         context_token_budget=config.context_token_budget,
         enabled=config.ai_replies_enabled,
     )
+    shadow_review_service = ShadowReviewService(
+        database.shadow_reviews,
+        reply_service,
+        candidate_evaluation_service,
+        database.background_jobs,
+    )
 
     dev_user_id = next(iter(config.admin_user_ids), None) if config.mini_app_dev else None
     background_worker = BackgroundWorker(
@@ -139,6 +146,7 @@ def create_api_app(config: Config, database: Database, processing_status_service
             "candidate_evaluation": lambda payload: candidate_evaluation_service.evaluate(
                 str(payload["candidate_id"])
             ),
+            "shadow_review": lambda payload: shadow_review_service.run(int(payload["review_id"])),
         },
     )
 
@@ -195,6 +203,7 @@ def create_api_app(config: Config, database: Database, processing_status_service
             background_worker=background_worker,
             reply_decision_service=reply_decision_service,
             risk_routing_service=risk_routing_service,
+            shadow_review_service=shadow_review_service,
             mini_app_dev=config.mini_app_dev,
             dev_user_id=dev_user_id,
         ),

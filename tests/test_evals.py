@@ -42,6 +42,7 @@ async def test_checked_in_regression_baseline_is_reproducible() -> None:
     assert summary["case_count"] == len(cases)
     assert summary["pass_rate"] == 1.0
     assert summary["hard_failure_count"] == 0
+    assert summary["p95_latency_ms"] >= 0
     assert all(result.latency_ms >= 0 for result in results)
 
 

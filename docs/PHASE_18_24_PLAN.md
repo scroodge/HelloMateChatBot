@@ -1,6 +1,6 @@
 # HelloMate — план развития Phase 18–24
 
-_Статус: Phase 18–21C реализованы и deployed; Phase 21D candidate lab реализован locally, credential-registry deployment pending; Phase 22A–22C и Phase 23A–23C реализованы locally; Phase 24 proposal · Последнее обновление: 2026-07-22_
+_Статус: Phase 18–21C реализованы и deployed; Phase 21D candidate lab реализован locally, credential-registry deployment pending; Phase 22A–22C, Phase 23A–23C и Phase 24A–24B реализованы locally; Phase 24C–24D proposal · Последнее обновление: 2026-07-22_
 
 ## 1. Цель
 
@@ -692,6 +692,20 @@ canary для выбранных контактов.
 - Верификация: 42 hard-rule/canary and existing routing tests, Ruff, Mini App
   JavaScript syntax и offline Eval Lab regression gate прошли.
 
+#### Canary rollout, test later
+
+1. Оставить `RISK_ROUTING_CANARY_ENABLED=false` после deployment и собрать
+   несколько дней shadow-only decisions.
+2. Проверить amber divergences в «Риск-проверка, shadow»: money/medical/legal,
+   availability и external-action messages должны быть объяснимы, а бытовые
+   сообщения не должны часто попадать в risk.
+3. Только после review поставить `RISK_ROUTING_CANARY_ENABLED=true`, restart
+   service и включить «Безопасный canary» ровно для одного low-stakes контакта.
+4. Наблюдать Suggest Inbox и owner feedback. При одном неверном downgrade
+   выключить global flag: это мгновенно возвращает static routing для всех.
+5. Расширять список контактов только после owner review; не включать canary для
+   чувствительных контактов до достаточного количества корректных shadow cases.
+
 ### Definition of Done
 
 - risk decision explainable;
@@ -719,6 +733,17 @@ canary для выбранных контактов.
 одинаковый eval dataset. Provider-specific возможности тестируются отдельным
 экспериментом и не должны искажать baseline comparison.
 
+### Фактический результат 24A (2026-07-22)
+
+- Candidate Eval Lab сохраняет и показывает одинаковые quality/safety metrics
+  для каждого completed candidate: pass rate, hard failures, total input/output
+  tokens, mean latency и p95 latency.
+- Новый `/api/admin/eval-candidates/matrix` возвращает compact provider-neutral
+  comparison rows для будущего decision report. Он не меняет working model или
+  routing.
+- Верификация: 24 focused tests, Ruff, Mini App JavaScript syntax и offline
+  Eval Lab regression gate прошли.
+
 ### 24B. Shadow и blind review
 
 - production-сообщение обрабатывает активная модель;
@@ -726,6 +751,19 @@ canary для выбранных контактов.
 - владелец может слепо сравнить ответы A/B без названия модели;
 - сохраняются quality scores, latency и estimated cost;
 - shadow content соблюдает privacy policy контакта.
+
+### Фактический результат 24B (2026-07-22)
+
+- В Candidate Lab добавлен owner-triggered blind A/B review: owner явно вводит
+  контакт, сообщение и candidate (например, `gpt-5-mini`), после чего job
+  генерирует baseline и candidate reply с одним compiled context.
+- Результаты A/B случайно перемешиваются, не отправляются контакту и остаются
+  owner-only operational data. Owner выбирает A, B или tie; после выбора
+  сохраняется, выиграл ли baseline.
+- Автоматическое копирование production messages в external provider намеренно
+  не включено: первые reviews происходят только по прямому действию owner.
+- Верификация: 33 focused tests, Ruff, Mini App JavaScript syntax и offline
+  Eval Lab regression gate прошли.
 
 ### 24C. Decision criteria
 

@@ -9,6 +9,7 @@ from uuid import uuid4
 
 from app.config import Config
 from app.evals.core import load_cases, run_cases, summarize
+from app.models.generation import GenerationRequest, GenerationResult
 from app.services.llm.ollama_provider import OllamaProvider
 from app.services.llm.openai_provider import OpenAIProvider
 
@@ -40,6 +41,45 @@ class CandidateEvaluationService:
             "model": self.config.llm_model,
             "base_url": self.config.llm_base_url,
         }
+
+    def matrix(self) -> list[dict[str, object]]:
+        """Return comparable, owner-safe metrics for completed candidates."""
+
+        rows: list[dict[str, object]] = []
+        for candidate in self.list():
+            summary = candidate.get("summary")
+            rows.append(
+                {
+                    "id": candidate["id"],
+                    "name": candidate["name"],
+                    "provider": candidate["provider"],
+                    "model": candidate["model"],
+                    "status": candidate["status"],
+                    "pass_rate": summary.get("pass_rate") if summary else None,
+                    "hard_failure_count": summary.get("hard_failure_count") if summary else None,
+                    "mean_latency_ms": summary.get("mean_latency_ms") if summary else None,
+                    "p95_latency_ms": summary.get("p95_latency_ms") if summary else None,
+                    "input_tokens": summary.get("input_tokens") if summary else None,
+                    "output_tokens": summary.get("output_tokens") if summary else None,
+                }
+            )
+        return rows
+
+    async def generate_shadow(
+        self, candidate_id: str, messages: list[dict[str, str]]
+    ) -> GenerationResult:
+        candidate = next((item for item in self.list() if item["id"] == candidate_id), None)
+        if candidate is None:
+            raise ValueError("Candidate not found")
+        provider = self._provider(candidate)
+        try:
+            return await provider.generate(
+                GenerationRequest(messages, "shadow", None, "baseline", "baseline")
+            )
+        finally:
+            close_provider = getattr(provider, "aclose", None)
+            if close_provider is not None:
+                await close_provider()
 
     def add(
         self, name: str, provider: str, model: str, base_url: str, credential_id: str = "default"

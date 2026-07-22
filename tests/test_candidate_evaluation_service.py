@@ -122,3 +122,45 @@ def test_enqueue_marks_candidate_queued_and_keeps_one_active_run() -> None:
     assert queued["evaluation_version"] == 3
     assert service.enqueue_evaluation("candidate-1") == queued
     jobs.enqueue.assert_called_once()
+
+
+def test_matrix_exposes_comparable_quality_and_latency_metrics() -> None:
+    settings = FakeSettings(
+        json.dumps(
+            [
+                {
+                    "id": "candidate-1",
+                    "name": "Candidate",
+                    "provider": "openai",
+                    "model": "gpt-test",
+                    "status": "failed",
+                    "summary": {
+                        "pass_rate": 0.8,
+                        "hard_failure_count": 1,
+                        "mean_latency_ms": 120.0,
+                        "p95_latency_ms": 240,
+                        "input_tokens": 50,
+                        "output_tokens": 25,
+                    },
+                }
+            ]
+        )
+    )
+
+    matrix = CandidateEvaluationService(settings, MagicMock()).matrix()
+
+    assert matrix == [
+        {
+            "id": "candidate-1",
+            "name": "Candidate",
+            "provider": "openai",
+            "model": "gpt-test",
+            "status": "failed",
+            "pass_rate": 0.8,
+            "hard_failure_count": 1,
+            "mean_latency_ms": 120.0,
+            "p95_latency_ms": 240,
+            "input_tokens": 50,
+            "output_tokens": 25,
+        }
+    ]

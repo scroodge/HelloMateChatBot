@@ -726,6 +726,15 @@
       <div id="candidate-form-error" class="error" hidden></div>
       <button class="btn" onclick="addEvalCandidate()">Добавить кандидата</button></div>
     <div class="card"><div class="card-title">Проверки</div><div id="candidate-list" class="activity-meta">Загрузка...</div></div>
+    <div class="card">
+      <div class="card-title">Слепое сравнение A / B</div>
+      <div class="activity-lede">Запускается только по твоему действию. Оба ответа остаются в панели, контакт ничего не получает.</div>
+      <label>ID контакта</label><input type="number" id="shadow-user-id" placeholder="Например, 123456789">
+      <label>Кандидат</label><select id="shadow-candidate"><option value="">Сначала добавь кандидата</option></select>
+      <label>Сообщение для сравнения</label><textarea id="shadow-message" placeholder="Вставь сообщение контакта для приватного A/B сравнения"></textarea>
+      <button class="btn" onclick="createShadowReview()">Создать сравнение</button>
+    </div>
+    <div class="card"><div class="card-title">Слепые сравнения</div><div id="shadow-review-list" class="activity-meta">Загрузка...</div></div>
   </div>
 
   <!-- ── PLAYGROUND ── -->
@@ -2224,24 +2233,63 @@ async function loadEvalCandidates() {
       providerInput.dataset.initialized = 'true';
     }
     formError.hidden = true;
+    const shadowSelect = document.getElementById('shadow-candidate');
+    shadowSelect.innerHTML = items.length
+      ? items.map(item => `<option value="${escHtml(item.id)}">${escHtml(item.name)} · ${escHtml(item.model)}</option>`).join('')
+      : '<option value="">Сначала добавь кандидата</option>';
     el.innerHTML = items.length ? items.map(item => {
       const isWorking = item.status === 'queued' || item.status === 'running';
       const report = item.summary ? ` · ${Math.round(item.summary.pass_rate * 100)}% пройдено · ${item.summary.hard_failure_count} hard failures` : '';
+      const performance = item.summary && item.summary.p95_latency_ms != null
+        ? `Средняя задержка: ${Math.round(item.summary.mean_latency_ms)} мс · p95: ${item.summary.p95_latency_ms} мс`
+        : '';
       const verdict = item.status === 'passed' ? 'Прошёл baseline, всё ещё не влияет на ответы' : item.status === 'failed' ? 'Не прошёл, routing не меняется' : item.status === 'queued' ? 'В очереди, можно закрыть Mini App' : item.status === 'running' ? 'Выполняется в фоне, результат появится здесь' : 'Ещё не проверен';
       const marker = item.status === 'passed' ? 'ok' : item.status === 'failed' ? 'problem' : isWorking ? 'live' : '';
       const runLabel = isWorking ? 'Проверка запущена' : 'Проверить снова';
-      return `<div class="activity-row"><span class="activity-mark ${marker}"></span><div class="activity-copy"><div class="activity-title">${escHtml(item.name)} · ${escHtml(item.model)}</div><div class="activity-meta">${escHtml(verdict)}${report}</div><div class="row" style="margin-top:7px"><button class="btn btn-sm" style="width:auto" ${isWorking ? 'disabled' : ''} onclick="runEvalCandidate('${escHtml(item.id)}')">${runLabel}</button><button class="btn btn-sm btn-secondary" style="width:auto" onclick="deleteEvalCandidate('${escHtml(item.id)}')">Удалить</button></div></div></div>`;
+      return `<div class="activity-row"><span class="activity-mark ${marker}"></span><div class="activity-copy"><div class="activity-title">${escHtml(item.name)} · ${escHtml(item.model)}</div><div class="activity-meta">${escHtml(verdict)}${report}</div>${performance ? `<div class="activity-meta">${escHtml(performance)}</div>` : ''}<div class="row" style="margin-top:7px"><button class="btn btn-sm" style="width:auto" ${isWorking ? 'disabled' : ''} onclick="runEvalCandidate('${escHtml(item.id)}')">${runLabel}</button><button class="btn btn-sm btn-secondary" style="width:auto" onclick="deleteEvalCandidate('${escHtml(item.id)}')">Удалить</button></div></div></div>`;
     }).join('') : 'Добавь кандидата, затем запусти проверку.';
     clearTimeout(window.candidateRefreshTimer);
     if (items.some(item => item.status === 'queued' || item.status === 'running')) {
       window.candidateRefreshTimer = setTimeout(loadEvalCandidates, 3000);
     }
+    loadShadowReviews();
   } catch (e) {
     const message = `Не удалось загрузить серверные ключи: ${e.message}`;
     formError.textContent = message;
     formError.hidden = false;
     el.innerHTML = `<div class="error">${escHtml(message)}</div>`;
   }
+}
+async function loadShadowReviews() {
+  const el = document.getElementById('shadow-review-list');
+  if (!el) return;
+  try {
+    const items = await get('/admin/shadow-reviews');
+    el.innerHTML = items.length ? items.map(item => {
+      if (item.status === 'ready') return `<div class="activity-row"><span class="activity-mark live"></span><div class="activity-copy"><div class="activity-title">Выбери более удачный ответ</div><div class="activity-meta">A: ${escHtml(item.reply_a)}</div><div class="activity-meta">B: ${escHtml(item.reply_b)}</div><div class="row" style="margin-top:7px"><button class="btn btn-sm" style="width:auto" onclick="resolveShadowReview(${item.id}, 'a')">A лучше</button><button class="btn btn-sm" style="width:auto" onclick="resolveShadowReview(${item.id}, 'b')">B лучше</button><button class="btn btn-sm btn-secondary" style="width:auto" onclick="resolveShadowReview(${item.id}, 'tie')">Равно</button></div></div></div>`;
+      const detail = item.status === 'failed' ? `Ошибка: ${item.error || 'неизвестно'}` : 'Готовим два приватных ответа…';
+      return `<div class="activity-row"><span class="activity-mark ${item.status === 'failed' ? 'problem' : 'live'}"></span><div class="activity-copy"><div class="activity-title">Сравнение #${item.id}</div><div class="activity-meta">${escHtml(detail)}</div></div></div>`;
+    }).join('') : 'Создай первое A/B сравнение выше.';
+  } catch (e) { el.innerHTML = `<div class="error">${escHtml(e.message)}</div>`; }
+}
+async function createShadowReview() {
+  try {
+    const userId = Number(document.getElementById('shadow-user-id').value);
+    const candidateId = document.getElementById('shadow-candidate').value;
+    const messageText = document.getElementById('shadow-message').value.trim();
+    if (!userId || !candidateId || !messageText) throw new Error('Укажи контакт, кандидата и сообщение');
+    await post('/admin/shadow-reviews', { user_id: userId, candidate_id: candidateId, message_text: messageText });
+    toast('Сравнение поставлено в очередь');
+    loadShadowReviews();
+    setTimeout(loadShadowReviews, 2000);
+  } catch (e) { tg.showAlert?.('Ошибка: ' + e.message); }
+}
+async function resolveShadowReview(id, winner) {
+  try {
+    const result = await post(`/admin/shadow-reviews/${id}/resolve`, { winner });
+    toast(result.baseline_selected ? 'Выбран текущий baseline' : result.winner === 'tie' ? 'Зафиксировано: равно' : 'Выбран кандидат');
+    loadShadowReviews();
+  } catch (e) { tg.showAlert?.('Ошибка: ' + e.message); }
 }
 async function addEvalCandidate() {
   try {

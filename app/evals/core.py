@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -440,6 +441,8 @@ def summarize(results: list[CaseResult]) -> dict[str, Any]:
 
     if not results:
         raise EvaluationError("No evaluation results")
+    latencies = sorted(result.latency_ms for result in results)
+    p95_index = max(0, math.ceil(len(latencies) * 0.95) - 1)
     return {
         "case_count": len(results),
         "passed_count": sum(result.passed for result in results),
@@ -447,6 +450,7 @@ def summarize(results: list[CaseResult]) -> dict[str, Any]:
         "hard_failure_count": sum(len(result.hard_failures) for result in results),
         "mean_soft_score": round(sum(result.score for result in results) / len(results), 3),
         "mean_latency_ms": round(sum(result.latency_ms for result in results) / len(results), 1),
+        "p95_latency_ms": latencies[p95_index],
         "input_tokens": sum(result.input_tokens or 0 for result in results),
         "output_tokens": sum(result.output_tokens or 0 for result in results),
     }

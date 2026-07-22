@@ -37,6 +37,7 @@ from app.services.reply_decision_service import ReplyDecisionService
 from app.services.reply_service import ReplyService
 from app.services.risk_routing_service import RiskRoutingService
 from app.services.settings_service import SettingsService
+from app.services.shadow_review_service import ShadowReviewService
 from app.services.suggestions_service import SuggestionsService
 from app.services.summary_service import SummaryService
 
@@ -160,6 +161,16 @@ class RiskCanaryContactRequest(BaseModel):
     enabled: bool
 
 
+class ShadowReviewRequest(BaseModel):
+    user_id: int
+    candidate_id: str
+    message_text: str
+
+
+class ShadowReviewResolveRequest(BaseModel):
+    winner: str
+
+
 # ---------------------------------------------------------------------------
 # Router factory
 # ---------------------------------------------------------------------------
@@ -190,6 +201,7 @@ def create_admin_router(
     background_worker: BackgroundWorker | None = None,
     reply_decision_service: ReplyDecisionService | None = None,
     risk_routing_service: RiskRoutingService | None = None,
+    shadow_review_service: ShadowReviewService | None = None,
     *,
     mini_app_dev: bool = False,
     dev_user_id: int | None = None,
@@ -349,6 +361,10 @@ def create_admin_router(
     async def list_eval_candidates(caller_id: int = AdminUser) -> list[dict[str, object]]:
         return candidate_evaluation_service.list() if candidate_evaluation_service else []
 
+    @router.get("/eval-candidates/matrix")
+    async def eval_candidate_matrix(caller_id: int = AdminUser) -> list[dict[str, object]]:
+        return candidate_evaluation_service.matrix() if candidate_evaluation_service else []
+
     @router.get("/background-jobs/health")
     async def background_jobs_health(caller_id: int = AdminUser) -> dict[str, object]:
         if background_worker is None:
@@ -383,6 +399,38 @@ def create_admin_router(
         if risk_routing_service is None:
             raise HTTPException(status_code=503, detail="Risk routing is not enabled")
         return {"enabled": risk_routing_service.set_contact(user_id, request.enabled)}
+
+    @router.get("/shadow-reviews")
+    async def list_shadow_reviews(caller_id: int = AdminUser) -> list[dict[str, object]]:
+        return shadow_review_service.recent() if shadow_review_service else []
+
+    @router.post("/shadow-reviews")
+    async def create_shadow_review(
+        request: ShadowReviewRequest, caller_id: int = AdminUser
+    ) -> dict[str, object]:
+        if shadow_review_service is None:
+            raise HTTPException(status_code=503, detail="Shadow reviews are not enabled")
+        try:
+            review = shadow_review_service.queue(
+                request.user_id, request.candidate_id, request.message_text
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return {"id": review.id, "status": review.status}
+
+    @router.post("/shadow-reviews/{review_id}/resolve")
+    async def resolve_shadow_review(
+        review_id: int, request: ShadowReviewResolveRequest, caller_id: int = AdminUser
+    ) -> dict[str, object]:
+        if shadow_review_service is None:
+            raise HTTPException(status_code=503, detail="Shadow reviews are not enabled")
+        try:
+            result = shadow_review_service.resolve(review_id, request.winner)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        if result is None:
+            raise HTTPException(status_code=404, detail="Shadow review not found or not ready")
+        return result
 
     @router.get("/eval-candidates/defaults")
     async def eval_candidate_defaults(caller_id: int = AdminUser) -> dict[str, object]:

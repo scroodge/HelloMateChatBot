@@ -315,6 +315,24 @@ reply_decisions = Table(
     Index("idx_reply_decisions_user_created", "user_id", "created_at"),
 )
 
+shadow_reviews = Table(
+    "shadow_reviews",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("user_id", Integer, nullable=False),
+    Column("candidate_id", Text, nullable=False),
+    Column("message_text", Text, nullable=False),
+    Column("reply_a", Text),
+    Column("reply_b", Text),
+    Column("mapping", Text),
+    Column("status", Text, nullable=False, default="queued"),
+    Column("winner", Text),
+    Column("error", Text),
+    Column("created_at", Text, nullable=False),
+    Column("resolved_at", Text),
+    Index("idx_shadow_reviews_status_created", "status", "created_at"),
+)
+
 generation_runs = Table(
     "generation_runs",
     metadata,
