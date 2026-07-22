@@ -1,6 +1,6 @@
 # HelloMate — план развития Phase 18–24
 
-_Статус: Phase 18–21C реализованы и deployed; Phase 21D candidate lab реализован locally, credential-registry deployment pending; Phase 22A–22C, Phase 23A–23C и Phase 24A–24B реализованы locally; Phase 24C–24D proposal · Последнее обновление: 2026-07-22_
+_Статус: Phase 18–21C реализованы и deployed; Phase 21D candidate lab реализован locally, credential-registry deployment pending; Phase 22A–22C, Phase 23A–23C и Phase 24A–24C реализованы locally; Phase 24D proposal · Последнее обновление: 2026-07-22_
 
 ## 1. Цель
 
@@ -784,6 +784,22 @@ canary для выбранных контактов.
 2. **API-first** — качество API существенно лучше при приемлемой цене/privacy.
 3. **Hybrid** — local для background/private/fallback, API для generation.
 4. **Route by risk/complexity** — разные модели для разных классов запроса.
+
+### Фактический результат 24C (2026-07-22)
+
+- В Candidate Lab добавлен owner-triggered, versioned decision snapshot. Он
+  объединяет regression safety, p95 latency и resolved blind A/B reviews для
+  каждого кандидата, но не меняет active model, routing или fallback.
+- Явные критерии `phase24c-v1`: 0 hard failures, 100% regression pass rate,
+  минимум 5 resolved reviews, предпочтение кандидата минимум 60% и p95 не
+  выше 15 секунд. Пока данных недостаточно, результат честно помечается
+  `needs_owner_review`, а не делает вывод о модели.
+- Cost и availability сохраняются как `not_measured`, пока эти данные не
+  появятся в telemetry, поэтому snapshot не выдаёт непроверенные оценки за
+  факты. Snapshot хранит только агрегированные metrics, без raw сообщений или
+  A/B reply text.
+- Mini App даёт кнопку «Сохранить snapshot» и показывает текущий статус,
+  а новый snapshot остаётся owner-only audit record.
 
 ### 24D. Fine-tuning gate
 

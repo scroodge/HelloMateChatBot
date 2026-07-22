@@ -18,6 +18,7 @@ from app.services.greeting_rules_service import GreetingRulesService
 from app.services.greeting_service import GreetingService
 from app.services.learning_proposals_service import LearningProposalsService
 from app.services.memory_service import MemoryService
+from app.services.model_decision_service import ModelDecisionService
 from app.services.mood_service import MoodService
 from app.services.owner_reply_pairing_service import OwnerReplyPairingService
 from app.services.persona_service import PersonaService
@@ -63,6 +64,9 @@ def _make_client(db: Database) -> tuple[TestClient, ProfileService, SettingsServ
         db.background_jobs,
     )
     background_worker = BackgroundWorker(db.background_jobs, {})
+    model_decision_service = ModelDecisionService(
+        db.model_decision_reports, candidate_evaluation_service, db.shadow_reviews
+    )
 
     app = FastAPI()
     app.include_router(
@@ -85,6 +89,7 @@ def _make_client(db: Database) -> tuple[TestClient, ProfileService, SettingsServ
             learning_proposals_service=learning_proposals_service,
             candidate_evaluation_service=candidate_evaluation_service,
             background_worker=background_worker,
+            model_decision_service=model_decision_service,
             mini_app_dev=True,  # bypass Telegram auth in tests
             dev_user_id=ADMIN_ID,
         ),
@@ -106,6 +111,33 @@ def test_eval_candidate_defaults_exposes_credential_ids(tmp_path, monkeypatch) -
         "base_url": "http://ollama",
         "credential_ids": ["default", "openrouter", "openai"],
     }
+
+
+def test_model_decision_report_is_an_owner_triggered_snapshot(tmp_path) -> None:
+    with Database(f"sqlite:///{tmp_path / 'model-decision-report.db'}") as db:
+        client, _, settings = _make_client(db)
+        settings.set_bot_setting(
+            "eval_candidates_v1",
+            json.dumps(
+                [
+                    {
+                        "id": "candidate-1", "name": "Candidate", "provider": "openai",
+                        "model": "gpt-5-mini", "status": "passed",
+                        "summary": {
+                            "pass_rate": 1.0, "hard_failure_count": 0,
+                            "p95_latency_ms": 900,
+                        },
+                    }
+                ]
+            ),
+        )
+
+        created = client.post("/api/admin/model-decision-reports")
+        saved = client.get("/api/admin/model-decision-reports")
+
+    assert created.status_code == 200
+    assert created.json()["report"]["candidates"][0]["recommendation"] == "needs_owner_review"
+    assert saved.json()[0]["id"] == created.json()["id"]
 
 
 def test_delete_eval_candidate_removes_saved_result(tmp_path) -> None:

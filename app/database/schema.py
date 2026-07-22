@@ -333,6 +333,16 @@ shadow_reviews = Table(
     Index("idx_shadow_reviews_status_created", "status", "created_at"),
 )
 
+model_decision_reports = Table(
+    "model_decision_reports",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("criteria_version", Text, nullable=False),
+    Column("report", Text, nullable=False),
+    Column("created_at", Text, nullable=False),
+    Index("idx_model_decision_reports_created", "created_at"),
+)
+
 generation_runs = Table(
     "generation_runs",
     metadata,

@@ -28,6 +28,7 @@ from app.services.greeting_rules_service import GreetingRulesService
 from app.services.greeting_service import GreetingService
 from app.services.learning_proposals_service import LearningProposalsService
 from app.services.memory_service import MemoryService
+from app.services.model_decision_service import ModelDecisionService
 from app.services.mood_service import MoodService
 from app.services.owner_reply_pairing_service import OwnerReplyPairingService
 from app.services.persona_service import PersonaService
@@ -202,6 +203,7 @@ def create_admin_router(
     reply_decision_service: ReplyDecisionService | None = None,
     risk_routing_service: RiskRoutingService | None = None,
     shadow_review_service: ShadowReviewService | None = None,
+    model_decision_service: ModelDecisionService | None = None,
     *,
     mini_app_dev: bool = False,
     dev_user_id: int | None = None,
@@ -364,6 +366,16 @@ def create_admin_router(
     @router.get("/eval-candidates/matrix")
     async def eval_candidate_matrix(caller_id: int = AdminUser) -> list[dict[str, object]]:
         return candidate_evaluation_service.matrix() if candidate_evaluation_service else []
+
+    @router.get("/model-decision-reports")
+    async def list_model_decision_reports(caller_id: int = AdminUser) -> list[dict[str, object]]:
+        return model_decision_service.recent() if model_decision_service else []
+
+    @router.post("/model-decision-reports")
+    async def create_model_decision_report(caller_id: int = AdminUser) -> dict[str, object]:
+        if model_decision_service is None:
+            raise HTTPException(status_code=503, detail="Model decision gate is not enabled")
+        return model_decision_service.create_report()
 
     @router.get("/background-jobs/health")
     async def background_jobs_health(caller_id: int = AdminUser) -> dict[str, object]:

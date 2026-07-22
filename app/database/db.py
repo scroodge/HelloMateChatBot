@@ -28,6 +28,7 @@ from app.database.repositories.greeting import GreetingRepositoryImpl
 from app.database.repositories.greeting_rules import GreetingRulesRepositoryImpl
 from app.database.repositories.learning_proposals import LearningProposalsRepositoryImpl
 from app.database.repositories.memory import MemoryRepositoryImpl
+from app.database.repositories.model_decision_reports import ModelDecisionReportsRepositoryImpl
 from app.database.repositories.mood import MoodRepositoryImpl
 from app.database.repositories.owner_reply_pairs import OwnerReplyPairsRepositoryImpl
 from app.database.repositories.profile import ProfileRepositoryImpl
@@ -59,6 +60,7 @@ class Database:
         self.greeting_rules = GreetingRulesRepositoryImpl(self)
         self.settings = SettingsRepositoryImpl(self)
         self.shadow_reviews = ShadowReviewsRepositoryImpl(self)
+        self.model_decision_reports = ModelDecisionReportsRepositoryImpl(self)
         self.profiles = ProfileRepositoryImpl(self)
         self.reply_decisions = ReplyDecisionsRepositoryImpl(self)
         self.moods = MoodRepositoryImpl(self)

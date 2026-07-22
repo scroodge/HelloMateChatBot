@@ -735,6 +735,12 @@
       <button class="btn" onclick="createShadowReview()">Создать сравнение</button>
     </div>
     <div class="card"><div class="card-title">Слепые сравнения</div><div id="shadow-review-list" class="activity-meta">Загрузка...</div></div>
+    <div class="card">
+      <div class="card-title">Решение по модели</div>
+      <div class="activity-lede">Сохраняет текущие safety-проверки и результаты слепых сравнений. Не меняет рабочую модель или routing.</div>
+      <button class="btn btn-secondary" onclick="createModelDecisionReport()">Сохранить snapshot</button>
+      <div id="model-decision-report-list" class="activity-meta" style="margin-top:8px">Ещё нет snapshot.</div>
+    </div>
   </div>
 
   <!-- ── PLAYGROUND ── -->
@@ -2254,6 +2260,7 @@ async function loadEvalCandidates() {
     }
     loadShadowReviewContacts();
     loadShadowReviews();
+    loadModelDecisionReports();
   } catch (e) {
     const message = `Не удалось загрузить серверные ключи: ${e.message}`;
     formError.textContent = message;
@@ -2308,6 +2315,26 @@ async function resolveShadowReview(id, winner) {
     const result = await post(`/admin/shadow-reviews/${id}/resolve`, { winner });
     toast(result.baseline_selected ? 'Выбран текущий baseline' : result.winner === 'tie' ? 'Зафиксировано: равно' : 'Выбран кандидат');
     loadShadowReviews();
+  } catch (e) { tg.showAlert?.('Ошибка: ' + e.message); }
+}
+async function loadModelDecisionReports() {
+  const el = document.getElementById('model-decision-report-list');
+  if (!el) return;
+  try {
+    const reports = await get('/admin/model-decision-reports');
+    el.innerHTML = reports.length ? reports.map(report => {
+      const rows = report.report.candidates || [];
+      const eligible = rows.filter(row => row.recommendation === 'eligible_for_owner_decision').length;
+      const awaiting = rows.filter(row => row.recommendation === 'needs_owner_review').length;
+      return `<div class="activity-row"><span class="activity-mark ${eligible ? 'ok' : awaiting ? 'live' : ''}"></span><div class="activity-copy"><div class="activity-title">Snapshot #${report.id}</div><div class="activity-meta">${eligible ? `Готовы к решению владельца: ${eligible}` : awaiting ? `Нужно больше A/B отзывов: ${awaiting}` : 'Нет кандидата, готового к решению'}</div><div class="activity-meta">${escHtml(report.created_at)}</div></div></div>`;
+    }).join('') : 'Ещё нет snapshot.';
+  } catch (e) { el.innerHTML = `<div class="error">${escHtml(e.message)}</div>`; }
+}
+async function createModelDecisionReport() {
+  try {
+    await post('/admin/model-decision-reports', {});
+    toast('Snapshot решения сохранён');
+    loadModelDecisionReports();
   } catch (e) { tg.showAlert?.('Ошибка: ' + e.message); }
 }
 async function addEvalCandidate() {

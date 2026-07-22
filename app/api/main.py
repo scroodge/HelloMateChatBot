@@ -22,6 +22,7 @@ from app.services.greeting_rules_service import GreetingRulesService
 from app.services.greeting_service import GreetingService
 from app.services.learning_proposals_service import LearningProposalsService
 from app.services.memory_service import MemoryService
+from app.services.model_decision_service import ModelDecisionService
 from app.services.mood_service import MoodService
 from app.services.owner_reply_pairing_service import OwnerReplyPairingService
 from app.services.persona_service import PersonaService
@@ -138,6 +139,11 @@ def create_api_app(config: Config, database: Database, processing_status_service
         candidate_evaluation_service,
         database.background_jobs,
     )
+    model_decision_service = ModelDecisionService(
+        database.model_decision_reports,
+        candidate_evaluation_service,
+        database.shadow_reviews,
+    )
 
     dev_user_id = next(iter(config.admin_user_ids), None) if config.mini_app_dev else None
     background_worker = BackgroundWorker(
@@ -204,6 +210,7 @@ def create_api_app(config: Config, database: Database, processing_status_service
             reply_decision_service=reply_decision_service,
             risk_routing_service=risk_routing_service,
             shadow_review_service=shadow_review_service,
+            model_decision_service=model_decision_service,
             mini_app_dev=config.mini_app_dev,
             dev_user_id=dev_user_id,
         ),
