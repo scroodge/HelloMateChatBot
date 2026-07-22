@@ -2301,6 +2301,10 @@ async function loadShadowReviews() {
     const items = await get('/admin/shadow-reviews');
     el.innerHTML = items.length ? items.map(item => {
       if (item.status === 'ready') return `<div class="activity-row"><span class="activity-mark live"></span><div class="activity-copy"><div class="activity-title">Выбери более удачный ответ</div><div class="activity-meta">A: ${escHtml(item.reply_a)}</div><div class="activity-meta">B: ${escHtml(item.reply_b)}</div><div class="row" style="margin-top:7px"><button class="btn btn-sm" style="width:auto" onclick="resolveShadowReview(${item.id}, 'a')">A лучше</button><button class="btn btn-sm" style="width:auto" onclick="resolveShadowReview(${item.id}, 'b')">B лучше</button><button class="btn btn-sm btn-secondary" style="width:auto" onclick="resolveShadowReview(${item.id}, 'tie')">Равно</button></div></div></div>`;
+      if (item.status === 'resolved') {
+        const choice = item.winner === 'tie' ? 'ты отметил ответы как равные' : `ты выбрал ответ ${String(item.winner).toUpperCase()}`;
+        return `<div class="activity-row"><span class="activity-mark ok"></span><div class="activity-copy"><div class="activity-title">Сравнение #${item.id} завершено</div><div class="activity-meta">${escHtml(choice)}. Рабочая модель не менялась.</div></div></div>`;
+      }
       const detail = item.status === 'failed' ? `Ошибка: ${item.error || 'неизвестно'}` : 'Готовим два приватных ответа…';
       return `<div class="activity-row"><span class="activity-mark ${item.status === 'failed' ? 'problem' : 'live'}"></span><div class="activity-copy"><div class="activity-title">Сравнение #${item.id}</div><div class="activity-meta">${escHtml(detail)}</div></div></div>`;
     }).join('') : 'Создай первое A/B сравнение выше.';
