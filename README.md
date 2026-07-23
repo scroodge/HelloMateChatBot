@@ -251,7 +251,7 @@ chmod +x update.sh
 | `REPLY_DEBOUNCE_SECONDS` | `5` | Wait after the last contact message before replying; batches rapid short messages (`0` = off) |
 | `SUMMARY_ENABLED` | `true` | Enable the rolling conversation summary |
 | `SUMMARY_REFRESH_INTERVAL` | `10` | Refresh the summary after this many messages age out of the window |
-| `SUMMARY_MAX_CHARS` | `1500` | Max length of the stored summary |
+| `SUMMARY_MAX_CHARS` | `800` | Max length of the stored summary |
 | `FACTS_ENABLED` | `true` | Enable per-contact durable fact extraction |
 | `FACTS_REFRESH_INTERVAL` | `5` | Re-extract facts after this many new contact messages |
 | `STYLE_ENABLED` | `true` | Enable owner writing-style learning (still opt-in per contact) |

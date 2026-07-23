@@ -43,7 +43,7 @@ def _fill(memory: MemoryService, user_id: int, n: int) -> None:
             memory.record_assistant_message(user_id, f"owner {i}")
 
 
-def test_summary_prompt_requires_role_attribution_and_connected_prose() -> None:
+def test_summary_prompt_requires_compact_gender_neutral_semantic_context() -> None:
     prompt = _build_summary_messages(
         None,
         [
@@ -58,7 +58,10 @@ def test_summary_prompt_requires_role_attribution_and_connected_prose() -> None:
     user = prompt[1]["content"]
     assert "Всегда различай стороны" in system
     assert "не перечисляй отдельные реплики" in system
+    assert "Не сохраняй приветствия, реакции, погоду, спорт" in system
+    assert "не больше пяти связных коротких предложений" in system
     assert "не были прямо сформулированы" in system
+    assert "собеседниц" not in system
     assert "Контакт: У меня сын Лёша" in user
     assert "Я: Передавай привет" in user
 

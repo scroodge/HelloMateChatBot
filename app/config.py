@@ -185,7 +185,7 @@ class Config:
         summary_refresh_interval = int(os.getenv("SUMMARY_REFRESH_INTERVAL", "10"))
         if summary_refresh_interval < 1:
             raise ConfigError("SUMMARY_REFRESH_INTERVAL must be >= 1.")
-        summary_max_chars = int(os.getenv("SUMMARY_MAX_CHARS", "1500"))
+        summary_max_chars = int(os.getenv("SUMMARY_MAX_CHARS", "800"))
         if summary_max_chars < 100:
             raise ConfigError("SUMMARY_MAX_CHARS must be >= 100.")
 
