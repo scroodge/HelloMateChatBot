@@ -8,6 +8,7 @@ import pytest
 
 from app.services.reply_service import (
     ReplyService,
+    _accuracy_directive,
     _contains_cjk,
     _current_user_content,
     build_persona_prompt,
@@ -42,6 +43,13 @@ def test_build_persona_prompt_uses_first_person_english() -> None:
 
 def test_is_weather_query_reexported_for_reply_flow() -> None:
     assert is_weather_query("когда дождь?")
+
+
+def test_accuracy_directive_uses_gender_neutral_contact_wording() -> None:
+    directive = _accuracy_directive("ru")
+
+    assert "просьбу контакта" in directive
+    assert "собеседницы" not in directive
 
 
 @pytest.mark.asyncio
@@ -89,9 +97,9 @@ def test_reply_context_is_separated_from_contact_message() -> None:
         "ru",
     )
 
-    assert "это не новое сообщение собеседницы" in content
+    assert "это не новое сообщение контакта" in content
     assert "Цитируемое сообщение (Я)" in content
-    assert content.endswith("Новое сообщение собеседницы:\nПереведи)))")
+    assert content.endswith("Новое сообщение контакта:\nПереведи)))")
 
 
 @pytest.mark.asyncio
